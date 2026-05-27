@@ -39,40 +39,38 @@ from config import ICE_CLASS_TO_IDX, ICE_CLASSES, cfg
 from data.preprocessing import SARPreprocessor
 
 
-# ─── Augmentation pipelines ───────────────────────────────────────────────────
+# ─── Albumentations version detection ────────────────────────────────────────
+# Breaking API differences between albumentations 1.x and 2.x (verified on 2.0.8):
+#
+#   Transform          | 1.x signature          | 2.x signature
+#   -------------------+------------------------+---------------------------
+#   RandomResizedCrop  | height=h, width=w      | size=(h, w)    ← CHANGED
+#   Resize             | height=h, width=w      | height=h, width=w (same)
+#   GaussNoise         | var_limit=(lo, hi)     | no var_limit arg (use defaults)
+#   ElasticTransform   | alpha=30, sigma=5      | no alpha/sigma (use defaults)
 
-def _make_resize(h: int, w: int) -> A.BasicTransform:
-    """Return a resize transform compatible with albumentations 1.x and 2.x."""
+def _albu_major() -> int:
     try:
-        # albumentations >= 2.0
-        return A.Resize(size=(h, w))
-    except TypeError:
-        return A.Resize(height=h, width=w)
+        return int(A.__version__.split(".")[0])
+    except Exception:
+        return 1
 
+_ALBU2 = _albu_major() >= 2  # True when albumentations >= 2.0 is installed
+
+
+# ─── Augmentation pipelines ───────────────────────────────────────────────────
 
 def get_train_augmentations(image_size: Tuple[int, int]) -> A.Compose:
     h, w = image_size
-
-    # RandomResizedCrop: 'size' kwarg required in albumentations >= 2.0;
-    # 'height'/'width' used in 1.x.
-    try:
+    # Only RandomResizedCrop differs between 1.x and 2.x
+    if _ALBU2:
         crop = A.RandomResizedCrop(size=(h, w), scale=(0.7, 1.0), p=1.0)
-    except TypeError:
-        crop = A.RandomResizedCrop(height=h, width=w, scale=(0.7, 1.0), p=1.0)  # 1.x
-
-    # GaussNoise: 'var_limit' removed in 2.0; fall back to default args.
-    try:
-        noise = A.GaussNoise(var_limit=(0.001, 0.005), p=1.0)
-        noise  # trigger validation
-    except Exception:
         noise = A.GaussNoise(p=1.0)
-
-    # ElasticTransform: 'alpha'/'sigma' semantics changed in 2.0; use defaults.
-    try:
-        elastic = A.ElasticTransform(alpha=30, sigma=5, p=0.2)
-        elastic  # trigger validation
-    except Exception:
         elastic = A.ElasticTransform(p=0.2)
+    else:
+        crop = A.RandomResizedCrop(height=h, width=w, scale=(0.7, 1.0), p=1.0)
+        noise = A.GaussNoise(var_limit=(0.001, 0.005), p=1.0)
+        elastic = A.ElasticTransform(alpha=30, sigma=5, p=0.2)
 
     return A.Compose([
         crop,
@@ -86,10 +84,12 @@ def get_train_augmentations(image_size: Tuple[int, int]) -> A.Compose:
 
 
 def get_val_augmentations(image_size: Tuple[int, int]) -> A.Compose:
+    # A.Resize(height=h, width=w) works in BOTH albumentations 1.x and 2.x
     h, w = image_size
-    return A.Compose([
-        _make_resize(h, w),
-    ], additional_targets={"mask": "mask"})
+    return A.Compose(
+        [A.Resize(height=h, width=w)],
+        additional_targets={"mask": "mask"},
+    )
 
 
 # ─── Description parser ───────────────────────────────────────────────────────
