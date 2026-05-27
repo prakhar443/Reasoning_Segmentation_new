@@ -9,21 +9,22 @@ import torch
 
 
 # ─── Ice class definitions ────────────────────────────────────────────────────
+# Names must exactly match the subdirectory names inside dataset/
 
 ICE_CLASSES = [
-    "young_ice",
-    "first_year_ice",
-    "multi_year_ice",
-    "nilas",
-    "deformed_ridged_ice",
-    "open_water_leads",
+    "Young Ice",
+    "First Year Ice",
+    "Floating Ice",
+    "Glaciers",
+    "Icebergs",
+    "Old Ice",
 ]
 
 ICE_CLASS_TO_IDX = {cls: i for i, cls in enumerate(ICE_CLASSES)}
 IDX_TO_ICE_CLASS = {i: cls for cls, i in ICE_CLASS_TO_IDX.items()}
 
 # Class weights to handle imbalanced datasets (adjust per your distribution)
-ICE_CLASS_WEIGHTS = [1.0, 1.0, 1.5, 2.0, 1.5, 1.0]
+ICE_CLASS_WEIGHTS = [1.0, 1.0, 1.5, 1.5, 1.5, 1.0]
 
 
 # ─── Dataset config ───────────────────────────────────────────────────────────
@@ -38,9 +39,9 @@ class DataConfig:
     image_subdir: str = "images"
     mask_subdir: str = "masks"
 
-    # CSV file with columns: image, short_descriptions, long_descriptions
-    # One CSV per class folder  OR  a single combined CSV
-    descriptions_file: str = "descriptions.csv"
+    # Subdirectory holding per-class description xlsx files
+    # Each class folder contains:  descriptions/<class>_descriptions_appended.xlsx
+    descriptions_subdir: str = "descriptions"
 
     # Image settings
     image_size: Tuple[int, int] = (512, 512)

@@ -3,17 +3,22 @@ data/dataset.py — PyTorch Dataset for sea ice SAR segmentation.
 
 Expected directory layout:
     dataset/
-    ├── first_year_ice/
-    │   ├── images/          (original SAR .jpg/.tif)
-    │   ├── masks/           (binary mask images, same filename)
-    │   └── descriptions.csv (columns: image, short_descriptions, long_descriptions)
-    ├── young_ice/
+    ├── Young Ice/
+    │   ├── images/                                  (SAR images:  1_1003_.jpg)
+    │   ├── masks/                                   (binary masks: 1_1003_scat.jpg)
+    │   └── descriptions/
+    │       └── young_ice_descriptions_appended.xlsx (columns: image, short_descriptions,
+    │                                                  long_descriptions)
+    ├── First Year Ice/
     │   └── ...
-    └── ...  (one folder per class in ICE_CLASSES)
+    └── ...  (one folder per class listed in ICE_CLASSES)
 
-Each row in descriptions.csv looks like the example provided:
-    image, short_descriptions, long_descriptions
-    1_4719_scat.jpg, ['...'], ["...question..."]
+Mask naming convention:
+    image filename : 1_1003_.jpg
+    mask  filename : 1_1003_scat.jpg   (stem's trailing '_' replaced by '_scat')
+
+Description xlsx image column uses the mask filename (e.g. 1_1134_scat.jpg);
+the loader converts it back to the image filename for the lookup key.
 """
 
 import ast
@@ -127,60 +132,93 @@ class SeaIceDataset(Dataset):
         else:
             self.samples = self.samples[n_train + n_val:]
 
+    @staticmethod
+    def _mask_name_from_image(img_name: str) -> str:
+        """
+        Convert image filename to mask filename.
+
+        Convention used in this dataset:
+            image : 1_1003_.jpg   (stem ends with a trailing underscore)
+            mask  : 1_1003_scat.jpg
+
+        We strip the trailing '_' from the stem and append '_scat'.
+        """
+        p = Path(img_name)
+        mask_stem = p.stem.rstrip("_") + "_scat"
+        return mask_stem + p.suffix
+
     def _load_all_samples(self):
         for ice_class in ICE_CLASSES:
             class_dir = self.data_root / ice_class
             if not class_dir.exists():
                 continue
 
-            img_dir = class_dir / self.data_cfg.image_subdir
+            img_dir  = class_dir / self.data_cfg.image_subdir
             mask_dir = class_dir / self.data_cfg.mask_subdir
-            desc_file = class_dir / self.data_cfg.descriptions_file
+            desc_dir = class_dir / self.data_cfg.descriptions_subdir
 
-            # Load descriptions CSV
-            desc_map = {}
-            if desc_file.exists():
-                df = pd.read_csv(desc_file)
-                for _, row in df.iterrows():
-                    fname = str(row["image"]).strip()
-                    short = parse_description_cell(row.get("short_descriptions", ""))
-                    long = parse_description_cell(row.get("long_descriptions", ""))
-                    desc_map[fname] = {"short": short, "long": long}
+            # ── Load descriptions from per-class xlsx files ────────────────────
+            # The xlsx 'image' column uses the *mask* filename (e.g. 1_1134_scat.jpg).
+            # We convert it to the *image* filename for the lookup key.
+            desc_map: Dict[str, Dict[str, str]] = {}
+            if desc_dir.exists():
+                for xlsx_path in sorted(desc_dir.glob("*.xlsx")):
+                    try:
+                        df = pd.read_excel(xlsx_path, engine="openpyxl")
+                    except Exception as e:
+                        print(f"[dataset] Warning: could not read {xlsx_path}: {e}")
+                        continue
+                    for _, row in df.iterrows():
+                        mask_fname = str(row.get("image", "")).strip()
+                        if not mask_fname:
+                            continue
+                        # xlsx stores mask filename; map back to image filename
+                        img_fname = mask_fname.replace("_scat.", "_.")
+                        short = parse_description_cell(row.get("short_descriptions", ""))
+                        long  = parse_description_cell(row.get("long_descriptions", ""))
+                        desc_map[img_fname] = {"short": short, "long": long}
 
-            # Collect image–mask pairs
+            # ── Collect image–mask pairs ───────────────────────────────────────
             if not img_dir.exists():
                 continue
             for img_path in sorted(img_dir.glob("*")):
                 if img_path.suffix.lower() not in {".jpg", ".jpeg", ".png", ".tif", ".tiff"}:
                     continue
 
-                # Find corresponding mask
-                mask_path = mask_dir / img_path.name
-                if not mask_path.exists():
-                    # Try common suffix variants
-                    for ext in [".png", ".jpg", ".tif"]:
-                        alt = mask_dir / (img_path.stem + ext)
-                        if alt.exists():
-                            mask_path = alt
-                            break
-                    else:
-                        # No mask found — skip
-                        continue
+                # Derive mask path using dataset naming convention
+                mask_name = self._mask_name_from_image(img_path.name)
+                mask_path = mask_dir / mask_name
 
-                # Find description
+                if not mask_path.exists():
+                    # Fallback 1: same filename as image
+                    alt = mask_dir / img_path.name
+                    if alt.exists():
+                        mask_path = alt
+                    else:
+                        # Fallback 2: search for any file sharing the base number
+                        base = img_path.stem.rstrip("_")
+                        candidates = list(mask_dir.glob(f"{base}*"))
+                        if candidates:
+                            mask_path = candidates[0]
+                        else:
+                            continue   # no mask found → skip sample
+
+                # Retrieve description (default if missing)
                 desc = desc_map.get(img_path.name, {
-                    "short": f"Segment the {ice_class.replace('_', ' ')} in this SAR image.",
-                    "long": f"Identify and segment the {ice_class.replace('_', ' ')} region. "
-                            f"Where is the most characteristic feature of this ice type visible?",
+                    "short": f"Segment the {ice_class} in this SAR image.",
+                    "long":  (
+                        f"Identify and segment the {ice_class} region. "
+                        f"Where is the most characteristic feature of this ice type visible?"
+                    ),
                 })
 
                 self.samples.append({
                     "image_path": str(img_path),
-                    "mask_path": str(mask_path),
-                    "label": ICE_CLASS_TO_IDX[ice_class],
-                    "ice_class": ice_class,
+                    "mask_path":  str(mask_path),
+                    "label":      ICE_CLASS_TO_IDX[ice_class],
+                    "ice_class":  ice_class,
                     "short_desc": desc["short"],
-                    "long_desc": desc["long"],
+                    "long_desc":  desc["long"],
                 })
 
     def __len__(self) -> int:
