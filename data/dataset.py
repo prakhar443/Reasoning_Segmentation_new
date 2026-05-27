@@ -263,6 +263,12 @@ class SeaIceDataset(Dataset):
 
         # ── Load mask ──────────────────────────────────────────────────────────
         mask_pil = Image.open(sample["mask_path"]).convert("L")
+
+        # Dataset-level inconsistency: masks are ~138×187 while images are 256×256.
+        # Resize mask to match image using nearest-neighbour to preserve binary values.
+        if mask_pil.size != img_pil.size:          # PIL size = (W, H)
+            mask_pil = mask_pil.resize(img_pil.size, Image.NEAREST)
+
         mask_np = (np.array(mask_pil) > 127).astype(np.uint8)  # (H, W) binary
 
         # ── Augmentation (spatial transforms applied to both img and mask) ─────
