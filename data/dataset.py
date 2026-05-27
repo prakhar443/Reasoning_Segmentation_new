@@ -41,26 +41,54 @@ from data.preprocessing import SARPreprocessor
 
 # ─── Augmentation pipelines ───────────────────────────────────────────────────
 
+def _make_resize(h: int, w: int) -> A.BasicTransform:
+    """Return a resize transform compatible with albumentations 1.x and 2.x."""
+    try:
+        # albumentations >= 2.0
+        return A.Resize(size=(h, w))
+    except TypeError:
+        return A.Resize(height=h, width=w)
+
+
 def get_train_augmentations(image_size: Tuple[int, int]) -> A.Compose:
     h, w = image_size
+
+    # RandomResizedCrop: 'size' kwarg required in albumentations >= 2.0;
+    # 'height'/'width' used in 1.x.
+    try:
+        crop = A.RandomResizedCrop(size=(h, w), scale=(0.7, 1.0), p=1.0)
+    except TypeError:
+        crop = A.RandomResizedCrop(height=h, width=w, scale=(0.7, 1.0), p=1.0)  # 1.x
+
+    # GaussNoise: 'var_limit' removed in 2.0; fall back to default args.
+    try:
+        noise = A.GaussNoise(var_limit=(0.001, 0.005), p=1.0)
+        noise  # trigger validation
+    except Exception:
+        noise = A.GaussNoise(p=1.0)
+
+    # ElasticTransform: 'alpha'/'sigma' semantics changed in 2.0; use defaults.
+    try:
+        elastic = A.ElasticTransform(alpha=30, sigma=5, p=0.2)
+        elastic  # trigger validation
+    except Exception:
+        elastic = A.ElasticTransform(p=0.2)
+
     return A.Compose([
-        A.RandomResizedCrop(height=h, width=w, scale=(0.7, 1.0), p=1.0),
+        crop,
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.3),
         A.RandomRotate90(p=0.5),
-        A.OneOf([
-            A.GaussNoise(var_limit=(0.001, 0.005), p=1.0),
-            A.GaussianBlur(blur_limit=(3, 5), p=1.0),
-        ], p=0.3),
+        A.OneOf([noise, A.GaussianBlur(blur_limit=(3, 5), p=1.0)], p=0.3),
         A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.3),
-        A.ElasticTransform(alpha=30, sigma=5, p=0.2),
+        elastic,
     ], additional_targets={"mask": "mask"})
 
 
 def get_val_augmentations(image_size: Tuple[int, int]) -> A.Compose:
     h, w = image_size
     return A.Compose([
-        A.Resize(height=h, width=w),
+        _make_resize(h, w),
     ], additional_targets={"mask": "mask"})
 
 
