@@ -8,6 +8,7 @@ Output: patch-level feature tokens (B, N, D) + CLS token (B, D).
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from transformers import CLIPVisionModel, CLIPVisionConfig
 from peft import LoraConfig, get_peft_model, TaskType
 
@@ -58,16 +59,31 @@ class CLIPSAREncoder(nn.Module):
             nn.GELU(),
         )
 
+    # CLIP ViT-L/14 is trained at this fixed resolution
+    CLIP_INPUT_SIZE: int = 224
+
     def forward(self, pixel_values: torch.Tensor):
         """
         Args:
-            pixel_values: (B, 3, H, W)
+            pixel_values: (B, 3, H, W)  — any spatial size (e.g. 512×512)
 
         Returns:
             patch_tokens: (B, N, D)
             cls_token:    (B, D)
             attn_weights: (B, N)  — last-layer CLS attention mean over heads
         """
+        # CLIP ViT-L/14 requires exactly 224×224 input regardless of the
+        # pipeline's working resolution. Resize here so the rest of the pipeline
+        # can keep using higher-resolution feature maps.
+        h, w = pixel_values.shape[-2], pixel_values.shape[-1]
+        if h != self.CLIP_INPUT_SIZE or w != self.CLIP_INPUT_SIZE:
+            pixel_values = F.interpolate(
+                pixel_values,
+                size=(self.CLIP_INPUT_SIZE, self.CLIP_INPUT_SIZE),
+                mode="bilinear",
+                align_corners=False,
+            )
+
         outputs = self.clip(
             pixel_values=pixel_values,
             output_attentions=True,
