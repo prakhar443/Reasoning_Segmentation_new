@@ -19,7 +19,7 @@ from config import ICE_CLASS_WEIGHTS
 # ─── Dice loss ────────────────────────────────────────────────────────────────
 
 class DiceLoss(nn.Module):
-    def __init__(self, smooth: float = 1e-6):
+    def __init__(self, smooth: float = 1e-4):
         super().__init__()
         self.smooth = smooth
 
@@ -96,18 +96,33 @@ class AttentionGuidanceLoss(nn.Module):
         side = int(N ** 0.5)
 
         # Downsample mask to patch grid
-        mask_patches = F.adaptive_avg_pool2d(masks, (side, side))  # (B,1,s,s)
-        mask_flat = mask_patches.view(B, N)                          # (B, N)
+        mask_patches = F.adaptive_avg_pool2d(masks.float(), (side, side))  # (B,1,s,s)
+        mask_flat = mask_patches.view(B, N)                                  # (B, N)
 
-        # Normalise to probability distribution
-        attn_dist = F.softmax(attn_weights, dim=-1)         # (B, N)
-        mask_dist = mask_flat / (mask_flat.sum(dim=-1, keepdim=True) + 1e-8)
+        # Skip batches where no foreground exists (all-zero mask → NaN distribution)
+        foreground_sum = mask_flat.sum(dim=-1)  # (B,)
+        valid = foreground_sum > 0              # (B,) bool
 
-        # KL(mask_dist || attn_dist)
+        if not valid.any():
+            return attn_weights.new_tensor(0.0)
+
+        attn_w = attn_weights[valid]
+        mask_f = mask_flat[valid]
+
+        # Normalise to probability distributions; clamp log input to prevent log(0)→NaN
+        attn_dist = F.softmax(attn_w, dim=-1).clamp(min=1e-8)   # (B', N)
+        mask_dist = mask_f / (mask_f.sum(dim=-1, keepdim=True) + 1e-8)
+
+        # KL(mask_dist || attn_dist) — use log_target=False since mask_dist is a density
         kl = F.kl_div(
             attn_dist.log(), mask_dist,
             reduction="batchmean", log_target=False
         )
+
+        # Guard against any remaining NaN/Inf (e.g. due to FP16 underflow)
+        if not torch.isfinite(kl):
+            return attn_weights.new_tensor(0.0)
+
         return kl
 
 

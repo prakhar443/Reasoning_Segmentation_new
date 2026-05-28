@@ -153,9 +153,9 @@ class CrossAttentionReasoningModule(nn.Module):
         # Positional encoding
         self.pos_enc = SinCosPositionalEncoding(fusion_dim)
 
-        # Stack of cross-attention blocks
+        # Stack of cross-attention blocks (dropout=0.2 for regularisation on small dataset)
         self.ca_blocks = nn.ModuleList([
-            CrossAttentionBlock(fusion_dim, n_heads) for _ in range(4)
+            CrossAttentionBlock(fusion_dim, n_heads, dropout=0.2) for _ in range(4)
         ])
 
         # Output projection

@@ -132,9 +132,9 @@ class TrainConfig:
 
     # Optimiser
     optimizer: str = "adamw"
-    lr: float = 2e-4
-    lora_lr: float = 1e-3               # LoRA adapters can use higher LR
-    cls_head_lr: float = 5e-4
+    lr: float = 5e-5
+    lora_lr: float = 2e-4               # LoRA adapters can use higher LR
+    cls_head_lr: float = 1e-4
     weight_decay: float = 0.01
     betas: Tuple[float, float] = (0.9, 0.999)
 
@@ -145,17 +145,20 @@ class TrainConfig:
     # Loss weights
     lambda_mask: float = 1.0            # BCE + Dice for segmentation mask
     lambda_cls: float = 0.5             # CrossEntropy for 6-class head
-    lambda_cot: float = 0.3             # CoT reasoning supervision (if available)
-    dice_smooth: float = 1e-6
+    lambda_cot: float = 0.1             # CoT reasoning supervision (if available)
+    dice_smooth: float = 1e-4
 
     # Mixed precision
     fp16: bool = True
     bf16: bool = False
 
+    # Early stopping
+    early_stop_patience: int = 10       # stop if val F1 doesn't improve for N evals
+
     # Logging & checkpointing
     log_every: int = 10
-    eval_every: int = 500
-    save_every: int = 1000
+    eval_every: int = 50
+    save_every: int = 500
     keep_last_n: int = 3
     use_wandb: bool = False
     wandb_project: str = "sea-ice-seg"
