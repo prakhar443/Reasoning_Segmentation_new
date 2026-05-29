@@ -256,16 +256,21 @@ class SeaIceDataset(Dataset):
             mask_dir = class_dir / self.data_cfg.mask_subdir
             desc_dir = class_dir / self.data_cfg.descriptions_subdir
 
-            # ── Load descriptions from per-class xlsx files ────────────────────
-            # The xlsx 'image' column uses the *mask* filename (e.g. 1_1134_scat.jpg).
+            # ── Load descriptions from per-class xlsx OR csv files ─────────────
+            # The 'image' column uses the *mask* filename (e.g. 1_1134_scat.jpg).
             # We convert it to the *image* filename for the lookup key.
+            # (Some classes ship .csv instead of .xlsx — both are supported.)
             desc_map: Dict[str, Dict[str, str]] = {}
             if desc_dir.exists():
-                for xlsx_path in sorted(desc_dir.glob("*.xlsx")):
+                desc_files = sorted(desc_dir.glob("*.xlsx")) + sorted(desc_dir.glob("*.csv"))
+                for desc_path in desc_files:
                     try:
-                        df = pd.read_excel(xlsx_path, engine="openpyxl")
+                        if desc_path.suffix.lower() == ".csv":
+                            df = pd.read_csv(desc_path)
+                        else:
+                            df = pd.read_excel(desc_path, engine="openpyxl")
                     except Exception as e:
-                        print(f"[dataset] Warning: could not read {xlsx_path}: {e}")
+                        print(f"[dataset] Warning: could not read {desc_path}: {e}")
                         continue
                     for _, row in df.iterrows():
                         mask_fname = str(row.get("image", "")).strip()

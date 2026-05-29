@@ -23,6 +23,94 @@ def _group_norm(num_channels: int) -> nn.GroupNorm:
     return nn.GroupNorm(1, num_channels)
 
 
+def _double_conv(in_ch: int, out_ch: int) -> nn.Sequential:
+    """Conv-GN-GELU ×2 — the standard U-Net block, GroupNorm for small batches."""
+    return nn.Sequential(
+        nn.Conv2d(in_ch, out_ch, 3, padding=1),
+        _group_norm(out_ch), nn.GELU(),
+        nn.Conv2d(out_ch, out_ch, 3, padding=1),
+        _group_norm(out_ch), nn.GELU(),
+    )
+
+
+class ImageUNetDecoder(nn.Module):
+    """
+    U-Net over the raw SAR image, conditioned on CLIP patch tokens at the
+    bottleneck.
+
+    Why this exists: the `_scat` masks are fine-grained *texture / backscatter*
+    segmentations (high-scatter vs low-scatter regions that follow the image at
+    pixel scale). The token-only decoder is capped at the 16×16 CLIP patch grid,
+    which is far too coarse to reproduce that detail — it collapses to a constant
+    blob (flat mIoU). A U-Net sees the image at full resolution via skip
+    connections, so it can actually trace the high-scatter boundaries, while the
+    injected CLIP features still provide ice-type semantic context.
+    """
+
+    def __init__(self, image_size: Tuple[int, int] = (512, 512),
+                 cond_dim: int = 1024, base: int = 32):
+        super().__init__()
+        self.image_size = tuple(image_size)
+
+        self.enc1 = _double_conv(3, base)            # full res
+        self.enc2 = _double_conv(base, base * 2)     # /2
+        self.enc3 = _double_conv(base * 2, base * 4)  # /4
+        self.enc4 = _double_conv(base * 4, base * 8)  # /8  (bottleneck)
+        self.pool = nn.MaxPool2d(2)
+
+        # CLIP semantic context injected at the bottleneck
+        self.cond_proj = nn.Linear(cond_dim, base * 8)
+
+        self.up3  = nn.ConvTranspose2d(base * 8, base * 4, 2, 2)
+        self.dec3 = _double_conv(base * 8, base * 4)   # concat(up + enc3)
+        self.up2  = nn.ConvTranspose2d(base * 4, base * 2, 2, 2)
+        self.dec2 = _double_conv(base * 4, base * 2)
+        self.up1  = nn.ConvTranspose2d(base * 2, base, 2, 2)
+        self.dec1 = _double_conv(base * 2, base)
+        self.head = nn.Conv2d(base, 1, 1)
+
+    @staticmethod
+    def _match(x: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:
+        """Resize x to ref's spatial size if an odd input made them differ."""
+        if x.shape[-2:] != ref.shape[-2:]:
+            x = F.interpolate(x, size=ref.shape[-2:], mode="nearest")
+        return x
+
+    def forward(self, image: torch.Tensor,
+                cond_tokens: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """
+        Args:
+            image:       (B, 3, H, W) — preprocessed SAR tensor (full resolution)
+            cond_tokens: (B, N, cond_dim) — CLIP patch tokens (semantic context)
+
+        Returns:
+            mask logits (B, 1, H, W)
+        """
+        e1 = self.enc1(image)            # (B, base,   H,   W)
+        e2 = self.enc2(self.pool(e1))    # (B, 2base,  H/2, W/2)
+        e3 = self.enc3(self.pool(e2))    # (B, 4base,  H/4, W/4)
+        e4 = self.enc4(self.pool(e3))    # (B, 8base,  H/8, W/8)
+
+        if cond_tokens is not None:
+            B, N, _ = cond_tokens.shape
+            s = int(N ** 0.5)
+            cond = self.cond_proj(cond_tokens)                 # (B, N, 8base)
+            cond = cond.permute(0, 2, 1).reshape(B, -1, s, s)  # (B, 8base, s, s)
+            cond = F.interpolate(cond, size=e4.shape[-2:],
+                                 mode="bilinear", align_corners=False)
+            e4 = e4 + cond                                       # inject semantics
+
+        d3 = self.dec3(torch.cat([self._match(self.up3(e4), e3), e3], dim=1))
+        d2 = self.dec2(torch.cat([self._match(self.up2(d3), e2), e2], dim=1))
+        d1 = self.dec1(torch.cat([self._match(self.up1(d2), e1), e1], dim=1))
+        out = self.head(d1)                                     # (B, 1, H, W)
+
+        if out.shape[-2:] != self.image_size:
+            out = F.interpolate(out, size=self.image_size,
+                                mode="bilinear", align_corners=False)
+        return out
+
+
 class SAMModule(nn.Module):
     """
     Wraps SAM to accept batched prompts and return binary masks.

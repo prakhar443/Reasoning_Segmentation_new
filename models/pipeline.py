@@ -28,7 +28,7 @@ from models.visual_encoder import CLIPSAREncoder
 from models.depth_encoder import build_depth_encoder
 from models.reasoning_module import build_reasoning_module
 from models.prompt_generator import GeometricPromptGenerator
-from models.sam_module import SAMModule, LightweightMaskDecoder
+from models.sam_module import SAMModule, LightweightMaskDecoder, ImageUNetDecoder
 from models.ice_classifier import IceTypeClassifier
 from models.temporal_consistency import TemporalConsistencyModule
 
@@ -72,6 +72,9 @@ class SeaIceSegmentationPipeline(nn.Module):
         self.prompt_generator = GeometricPromptGenerator(model_cfg)
 
         # ── Module 6: SAM or lightweight decoder ──────────────────────────────
+        # decoder_type selects the non-SAM decoder; default "unet" gives sharp,
+        # full-resolution masks (the token decoder is capped at the 16x16 grid).
+        self.decoder_type = getattr(model_cfg, "decoder_type", "unet")
         if use_sam:
             print("[6/8] Loading SAM mask decoder...")
             try:
@@ -80,20 +83,12 @@ class SeaIceSegmentationPipeline(nn.Module):
                 # FileNotFoundError → checkpoint missing
                 # RuntimeError      → checkpoint corrupt (bad/partial download)
                 print(f"[WARN] Could not load SAM ({type(e).__name__}: {e})\n"
-                      f"Falling back to lightweight convolutional decoder.")
-                self.mask_decoder = LightweightMaskDecoder(
-                    in_dim=model_cfg.fusion_dim,
-                    image_size=default_cfg.data.image_size,
-                    spatial_dim=model_cfg.clip_hidden_dim,
-                )
+                      f"Falling back to '{self.decoder_type}' decoder.")
+                self.mask_decoder = self._build_light_decoder(model_cfg)
                 self.use_sam = False
         else:
-            print("[6/8] Using lightweight convolutional mask decoder...")
-            self.mask_decoder = LightweightMaskDecoder(
-                in_dim=model_cfg.fusion_dim,
-                image_size=default_cfg.data.image_size,
-                spatial_dim=model_cfg.clip_hidden_dim,
-            )
+            print(f"[6/8] Using '{self.decoder_type}' mask decoder...")
+            self.mask_decoder = self._build_light_decoder(model_cfg)
 
         # ── Module 7: 6-class classification head ─────────────────────────────
         print("[7/8] Building ice type classification head...")
@@ -104,9 +99,23 @@ class SeaIceSegmentationPipeline(nn.Module):
         self.temporal = TemporalConsistencyModule(model_cfg)
 
         print("=" * 60)
-        print(f"Pipeline ready | SAM={self.use_sam}")
+        print(f"Pipeline ready | SAM={self.use_sam} | decoder={self.decoder_type}")
         print(f"Trainable parameters: {self._count_trainable():,}")
         print("=" * 60)
+
+    def _build_light_decoder(self, model_cfg):
+        """Construct the non-SAM mask decoder selected by model_cfg.decoder_type."""
+        if self.decoder_type == "unet":
+            return ImageUNetDecoder(
+                image_size=default_cfg.data.image_size,
+                cond_dim=model_cfg.clip_hidden_dim,
+                base=getattr(model_cfg, "decoder_base_channels", 32),
+            )
+        return LightweightMaskDecoder(
+            in_dim=model_cfg.fusion_dim,
+            image_size=default_cfg.data.image_size,
+            spatial_dim=model_cfg.clip_hidden_dim,
+        )
 
     def forward(
         self,
@@ -175,13 +184,23 @@ class SeaIceSegmentationPipeline(nn.Module):
         # ── Step 6: Mask decoding ─────────────────────────────────────────────
         iou_scores = torch.zeros(B, device=device)
 
-        if self.use_sam and images_np is not None and prompts_batch is not None:
-            # SAM path (returns float binary masks)
-            masks_hw, iou_scores = self.mask_decoder(images_np, prompts_batch)
-            masks_hw = masks_hw.to(device)
-            mask_logits = masks_hw  # already binary; no sigmoid needed for loss
+        if self.use_sam:
+            # SAM path (mask_decoder is a SAMModule, returns float binary masks)
+            if images_np is not None and prompts_batch is not None:
+                masks_hw, iou_scores = self.mask_decoder(images_np, prompts_batch)
+                masks_hw = masks_hw.to(device)
+                mask_logits = masks_hw  # already binary; no sigmoid for loss
+            else:
+                # SAM selected but no prompts available → empty mask
+                mask_logits = torch.zeros(B, 1, H, W, device=device)
+                masks_hw = mask_logits
+        elif self.decoder_type == "unet":
+            # U-Net decodes the full-resolution image, conditioned on CLIP
+            # patch tokens for ice-type semantics → sharp, image-grounded masks.
+            mask_logits = self.mask_decoder(images, patch_tokens)  # (B, 1, H, W)
+            masks_hw = torch.sigmoid(mask_logits)
         else:
-            # Lightweight decoder path (returns logits).
+            # Token decoder path (returns logits).
             # patch_tokens give the decoder image-specific spatial features
             # (the fused tokens alone are nearly input-independent here).
             mask_logits = self.mask_decoder(fused_tokens, patch_tokens)  # (B, 1, H, W)
@@ -249,10 +268,12 @@ class SeaIceSegmentationPipeline(nn.Module):
             p for p in self.mask_decoder.parameters() if p.requires_grad
         ]
 
+        decoder_lr = getattr(train_cfg, "decoder_lr", train_cfg.lr)
+
         return [
             {"params": lora_params,      "lr": train_cfg.lora_lr},
             {"params": cls_params,       "lr": train_cfg.cls_head_lr},
             {"params": temporal_params,  "lr": train_cfg.lr},
             {"params": reasoning_params, "lr": train_cfg.lr},
-            {"params": decoder_params,   "lr": train_cfg.lr},
+            {"params": decoder_params,   "lr": decoder_lr},
         ]

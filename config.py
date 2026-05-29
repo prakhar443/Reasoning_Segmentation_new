@@ -111,6 +111,14 @@ class ModelConfig:
     sam_model_type: str = "vit_h"        # options: vit_h, vit_l, vit_b
     sam_freeze: bool = True
 
+    # ── Lightweight (non-SAM) decoder ─────────────────────────────────────────
+    # "unet"  — full-resolution U-Net on the SAR image (sharp masks; recommended,
+    #           the `_scat` targets are fine texture maps the 16x16 token grid
+    #           cannot represent).
+    # "token" — coarse CLIP-token → upsample decoder (lower VRAM, much blurrier).
+    decoder_type: str = "unet"
+    decoder_base_channels: int = 32      # U-Net width; drop to 16 if VRAM-tight
+
     # ── Prompt generator ──────────────────────────────────────────────────────
     attn_threshold: float = 0.70
     max_prompts_per_image: int = 3
@@ -146,6 +154,7 @@ class TrainConfig:
     lr: float = 5e-5
     lora_lr: float = 2e-4               # LoRA adapters can use higher LR
     cls_head_lr: float = 1e-4
+    decoder_lr: float = 3e-4            # U-Net trains from scratch — needs higher LR
     weight_decay: float = 0.05          # ↑ from 0.01 — stronger L2 vs overfitting
     betas: Tuple[float, float] = (0.9, 0.999)
 
