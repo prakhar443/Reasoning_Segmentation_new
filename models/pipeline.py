@@ -76,8 +76,11 @@ class SeaIceSegmentationPipeline(nn.Module):
             print("[6/8] Loading SAM mask decoder...")
             try:
                 self.mask_decoder = SAMModule(model_cfg)
-            except FileNotFoundError as e:
-                print(f"[WARN] {e}\nFalling back to lightweight decoder.")
+            except (FileNotFoundError, RuntimeError, Exception) as e:
+                # FileNotFoundError → checkpoint missing
+                # RuntimeError      → checkpoint corrupt (bad/partial download)
+                print(f"[WARN] Could not load SAM ({type(e).__name__}: {e})\n"
+                      f"Falling back to lightweight convolutional decoder.")
                 self.mask_decoder = LightweightMaskDecoder(
                     in_dim=model_cfg.fusion_dim,
                     image_size=default_cfg.data.image_size,
