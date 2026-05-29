@@ -154,7 +154,7 @@ class TrainConfig:
     # Loss weights
     lambda_mask: float = 1.0            # BCE + Dice for segmentation mask
     lambda_cls: float = 0.5             # CrossEntropy for 6-class head
-    lambda_cot: float = 0.1             # CoT reasoning supervision (if available)
+    lambda_cot: float = 0.05            # CoT reasoning supervision (if available)
     dice_smooth: float = 1e-4
 
     # Mixed precision

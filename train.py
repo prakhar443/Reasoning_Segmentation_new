@@ -24,7 +24,7 @@ from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
@@ -131,19 +131,27 @@ def train_step(
     else:
         images_np = None
 
+    # path layout: .../dataset/<class>/images/<file> → parent.parent.name = class name
+    seq_ids = [str(Path(p).parent.parent.name) for p in batch["image_path"]]
+
     # Forward pass
-    with autocast(enabled=use_amp):
+    with autocast('cuda', enabled=use_amp):
         outputs = model(
             images=images,
             descriptions=descriptions,
             images_np=images_np,
-            sequence_ids=[p.split("/")[-2] for p in batch["image_path"]],
+            sequence_ids=seq_ids,
         )
         loss_dict = criterion(
             outputs=outputs,
             targets={"mask": masks, "label": labels},
         )
         loss = loss_dict["loss"]
+
+    # NaN guard: skip batch and clear temporal bank to prevent poisoning
+    if not torch.isfinite(loss):
+        model.temporal.reset_all()
+        return None
 
     # Backward pass
     if scaler:
@@ -173,6 +181,8 @@ def validate(
     model.eval()
     metrics = MetricAccumulator()
 
+    # Use "val_" prefix so validation sequences never mix with training banks.
+    # Clean up val-specific bank entries after the loop.
     for batch in tqdm(val_loader, desc="Validation", leave=False):
         images = batch["image"].to(device)
         masks = batch["mask"].to(device)
@@ -186,11 +196,14 @@ def validate(
                 for img in images
             ]
 
+        seq_ids = ["val_" + str(Path(p).parent.parent.name)
+                   for p in batch["image_path"]]
+
         outputs = model(
             images=images,
             descriptions=descriptions,
             images_np=images_np,
-            sequence_ids=[p.split("/")[-2] for p in batch["image_path"]],
+            sequence_ids=seq_ids,
         )
         loss_dict = criterion(outputs, {"mask": masks, "label": labels})
 
@@ -199,6 +212,11 @@ def validate(
             targets={"mask": masks, "label": labels},
             loss=loss_dict["loss"].item(),
         )
+
+    # Purge val_ entries to keep the bank from growing unboundedly
+    for key in list(model.temporal._banks.keys()):
+        if key.startswith("val_"):
+            del model.temporal._banks[key]
 
     model.train()
     return metrics.compute()
@@ -239,12 +257,20 @@ def train(
                 model, batch, criterion, optimizer, scaler, device, use_amp
             )
 
+            # NaN batch: gradients are already zeroed inside train_step
+            if step_result is None:
+                optimizer.zero_grad()
+                continue
+
             # Gradient accumulation
             if (batch_idx + 1) % grad_accum == 0:
                 if scaler:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                     scaler.step(optimizer)
                     scaler.update()
                 else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                     optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
@@ -412,7 +438,7 @@ def main():
     # Mixed precision scaler
     scaler = None
     if cfg.train.fp16:
-        scaler = GradScaler()
+        scaler = GradScaler('cuda')
 
     # Loss
     criterion = SeaIceLoss(cfg.train).to(device)
