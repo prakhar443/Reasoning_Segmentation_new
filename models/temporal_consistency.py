@@ -29,7 +29,13 @@ class TemporalMemoryBank:
 
     def push(self, mask_embedding: torch.Tensor, cls_logits: torch.Tensor,
              frame_id: int = -1):
-        """Store current frame's mask embedding and prediction."""
+        """Store current frame's mask embedding and prediction.
+        Silently drops entries containing NaN/Inf to prevent bank poisoning.
+        """
+        if not torch.isfinite(cls_logits).all():
+            return
+        if not torch.isfinite(mask_embedding).all():
+            return
         self.bank.append({
             "mask_embedding": mask_embedding.detach().cpu(),
             "cls_logits": cls_logits.detach().cpu(),
@@ -54,16 +60,21 @@ class TemporalMemoryBank:
         if len(self.bank) == 0:
             return current_logits, 1.0
 
-        # Cosine similarity with each bank entry
+        # Cosine similarity with each bank entry; skip any corrupted entries
         sims = []
         prev_logits = []
         for entry in self.bank:
             emb = entry["mask_embedding"].to(current_embedding.device)
+            lg  = entry["cls_logits"].to(current_logits.device)
+            if not torch.isfinite(emb).all() or not torch.isfinite(lg).all():
+                continue
             sim = F.cosine_similarity(
                 current_embedding.unsqueeze(0), emb.unsqueeze(0)
             ).item()
             sims.append(sim)
-            prev_logits.append(entry["cls_logits"].to(current_logits.device))
+            prev_logits.append(lg)
+        if not sims:
+            return current_logits, 1.0
 
         mean_sim = float(sum(sims) / len(sims))
 
@@ -141,13 +152,18 @@ class TemporalConsistencyModule(nn.Module):
             cur_logits = cls_logits[i]          # (num_classes,)
             cur_emb = mask_embeddings[i]         # (fusion_dim,)
 
-            # Learned gate if bank has entries
-            if len(bank) > 0:
-                prev_emb = bank.bank[-1]["mask_embedding"].to(cur_emb.device)
-                gate_input = torch.cat([cur_emb, prev_emb], dim=-1)   # (2D,)
-                gate_val = self.gate(gate_input.unsqueeze(0)).squeeze()  # scalar
-
-                prev_logits = bank.bank[-1]["cls_logits"].to(cur_logits.device)
+            # Learned gate if bank has valid entries
+            last_valid = next(
+                (e for e in reversed(bank.bank)
+                 if torch.isfinite(e["cls_logits"]).all()
+                 and torch.isfinite(e["mask_embedding"]).all()),
+                None,
+            )
+            if last_valid is not None:
+                prev_emb = last_valid["mask_embedding"].to(cur_emb.device)
+                prev_logits = last_valid["cls_logits"].to(cur_logits.device)
+                gate_input = torch.cat([cur_emb, prev_emb], dim=-1)
+                gate_val = self.gate(gate_input.unsqueeze(0)).squeeze()
                 smooth_logits = gate_val * cur_logits + (1 - gate_val) * prev_logits
             else:
                 smooth_logits = cur_logits

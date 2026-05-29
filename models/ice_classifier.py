@@ -74,7 +74,9 @@ class IceTypeClassifier(nn.Module):
 
         # ── Classify ──────────────────────────────────────────────────────────
         logits = self.mlp(combined)    # (B, num_classes)
-        return logits
+        # Clamp prevents FP16 overflow (max finite: 65504) from poisoning the
+        # temporal memory bank and turning cls_loss into NaN.
+        return logits.clamp(-20.0, 20.0)
 
     def predict(self, logits: torch.Tensor):
         """

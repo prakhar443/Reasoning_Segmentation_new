@@ -140,7 +140,9 @@ class WeightedClassificationLoss(nn.Module):
         logits: torch.Tensor,   # (B, num_classes)
         targets: torch.Tensor,  # (B,) int64
     ) -> torch.Tensor:
-        return F.cross_entropy(logits, targets, weight=self.weights)
+        # label_smoothing=0.1 prevents logits from growing to FP16 overflow range
+        return F.cross_entropy(logits, targets, weight=self.weights,
+                               label_smoothing=0.1)
 
 
 # ─── Attention regularisation loss (CoT proxy) ───────────────────────────────
