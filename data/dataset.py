@@ -92,6 +92,77 @@ def get_val_augmentations(image_size: Tuple[int, int]) -> A.Compose:
     )
 
 
+# ─── Mask binarization helpers ────────────────────────────────────────────────
+# The '_scat' masks are continuous-valued scattering maps (130–160 grey levels),
+# NOT clean binary labels. A fixed `> 127` threshold gives wildly inconsistent
+# foreground (0.4%–65% across classes), which collapses segmentation training.
+# Otsu picks a per-image threshold that separates the two dominant intensity
+# modes, giving a far more stable and learnable target.
+
+def _otsu_threshold(gray: np.ndarray) -> int:
+    """Compute Otsu's threshold (0–255) for a uint8 grayscale image."""
+    hist = np.bincount(gray.ravel(), minlength=256).astype(np.float64)
+    total = gray.size
+    sum_total = np.dot(np.arange(256), hist)
+    sum_b, w_b, max_var, thr = 0.0, 0.0, 0.0, 127
+    for t in range(256):
+        w_b += hist[t]
+        if w_b == 0:
+            continue
+        w_f = total - w_b
+        if w_f == 0:
+            break
+        sum_b += t * hist[t]
+        m_b = sum_b / w_b
+        m_f = (sum_total - sum_b) / w_f
+        between = w_b * w_f * (m_b - m_f) ** 2
+        if between > max_var:
+            max_var = between
+            thr = t
+    return thr
+
+
+def binarize_mask(gray: np.ndarray, mode: str = "otsu") -> np.ndarray:
+    """
+    Convert a (possibly continuous) grayscale mask to a binary {0,1} mask.
+
+    mode="otsu"   — per-image Otsu threshold (recommended for scattering maps)
+    mode="mean"   — threshold at the mask's own mean intensity
+    mode="fixed"  — legacy fixed > 127
+    """
+    if mode == "fixed":
+        return (gray > 127).astype(np.uint8)
+    if mode == "mean":
+        return (gray > gray.mean()).astype(np.uint8)
+
+    # Otsu with a degenerate-result guard: if the chosen threshold makes the
+    # foreground vanish (<0.5%) or swallow the image (>99.5%), fall back to mean.
+    thr = _otsu_threshold(gray)
+    binm = (gray > thr).astype(np.uint8)
+    fg = binm.mean()
+    if fg < 0.005 or fg > 0.995:
+        binm = (gray > gray.mean()).astype(np.uint8)
+    return binm
+
+
+def letterbox_to_square(arr: np.ndarray, size: int, is_mask: bool) -> np.ndarray:
+    """
+    Resize a (H, W) array into a (size, size) canvas preserving aspect ratio,
+    padding the remainder with zeros. Avoids the non-uniform stretch that
+    distorts the ~138×187 masks when forced into a 256×256 square.
+    """
+    h, w = arr.shape[:2]
+    scale = min(size / w, size / h)
+    new_w, new_h = max(1, int(round(w * scale))), max(1, int(round(h * scale)))
+    resample = Image.NEAREST if is_mask else Image.BILINEAR
+    resized = np.array(Image.fromarray(arr).resize((new_w, new_h), resample))
+    canvas = np.zeros((size, size), dtype=arr.dtype)
+    y0 = (size - new_h) // 2
+    x0 = (size - new_w) // 2
+    canvas[y0:y0 + new_h, x0:x0 + new_w] = resized
+    return canvas
+
+
 # ─── Description parser ───────────────────────────────────────────────────────
 
 def parse_description_cell(cell: str) -> str:
@@ -231,14 +302,26 @@ class SeaIceDataset(Dataset):
                         else:
                             continue   # no mask found → skip sample
 
-                # Retrieve description (default if missing)
-                desc = desc_map.get(img_path.name, {
-                    "short": f"Segment the {ice_class} in this SAR image.",
-                    "long":  (
-                        f"Identify and segment the {ice_class} region. "
-                        f"Where is the most characteristic feature of this ice type visible?"
-                    ),
-                })
+                # Retrieve description.
+                # To keep classification metrics honest, the prompt must NOT name
+                # the ice class (otherwise the cls head reads the answer from text).
+                use_name = getattr(self.data_cfg, "use_class_name_in_prompt", False)
+                if use_name:
+                    desc = desc_map.get(img_path.name, {
+                        "short": f"Segment the {ice_class} in this SAR image.",
+                        "long":  (
+                            f"Identify and segment the {ice_class} region. "
+                            f"Where is the most characteristic feature of this ice type visible?"
+                        ),
+                    })
+                else:
+                    desc = {
+                        "short": "Segment the dominant ice region in this SAR image.",
+                        "long":  (
+                            "Identify and segment the most salient ice region in this "
+                            "SAR image. Where are the strongest backscatter features?"
+                        ),
+                    }
 
                 self.samples.append({
                     "image_path": str(img_path),
@@ -262,14 +345,28 @@ class SeaIceDataset(Dataset):
         img_np = np.array(img_pil)                  # (H, W) uint8
 
         # ── Load mask ──────────────────────────────────────────────────────────
-        mask_pil = Image.open(sample["mask_path"]).convert("L")
+        mask_gray = np.array(Image.open(sample["mask_path"]).convert("L"))  # (Hm, Wm)
 
-        # Dataset-level inconsistency: masks are ~138×187 while images are 256×256.
-        # Resize mask to match image using nearest-neighbour to preserve binary values.
-        if mask_pil.size != img_pil.size:          # PIL size = (W, H)
-            mask_pil = mask_pil.resize(img_pil.size, Image.NEAREST)
+        # Binarize the continuous scattering map BEFORE any resize, so Otsu sees
+        # the true intensity distribution rather than interpolated values.
+        binarize_mode = getattr(self.data_cfg, "mask_binarize", "otsu")
+        mask_bin = binarize_mask(mask_gray, mode=binarize_mode)  # (Hm, Wm) {0,1}
 
-        mask_np = (np.array(mask_pil) > 127).astype(np.uint8)  # (H, W) binary
+        # Bring image and mask to a common spatial layout.
+        # Masks (~138×187) and images (256×256) differ in aspect ratio. Two modes:
+        #   "stretch"   — resize mask to image size (non-uniform, legacy behaviour)
+        #   "letterbox" — aspect-preserving fit + zero-pad (no geometric distortion)
+        resize_mode = getattr(self.data_cfg, "mask_resize_mode", "letterbox")
+        if resize_mode == "letterbox":
+            side = max(img_pil.size)  # work on a square canvas (W==H for these imgs)
+            img_np = letterbox_to_square(img_np, side, is_mask=False)
+            mask_np = letterbox_to_square(mask_bin, side, is_mask=True)
+        else:
+            if (mask_bin.shape[1], mask_bin.shape[0]) != img_pil.size:  # (W,H)
+                mask_bin = np.array(
+                    Image.fromarray(mask_bin).resize(img_pil.size, Image.NEAREST)
+                )
+            mask_np = mask_bin
 
         # ── Augmentation (spatial transforms applied to both img and mask) ─────
         augmented = self.aug(image=img_np, mask=mask_np)

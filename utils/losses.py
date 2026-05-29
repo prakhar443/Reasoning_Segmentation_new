@@ -37,26 +37,92 @@ class DiceLoss(nn.Module):
         return dice.mean()
 
 
-# ─── Combined mask loss (BCE + Dice) ─────────────────────────────────────────
+# ─── Focal loss (handles extreme foreground/background imbalance) ─────────────
+
+class FocalLoss(nn.Module):
+    """
+    Binary focal loss on raw logits. Down-weights easy (background) pixels so
+    the rare foreground dominates the gradient — essential when foreground is
+    <5% of pixels (the case for this SAR scattering dataset).
+    """
+
+    def __init__(self, alpha: float = 0.25, gamma: float = 2.0):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        ce = F.binary_cross_entropy_with_logits(logits, target, reduction="none")
+        p = torch.sigmoid(logits)
+        p_t = p * target + (1.0 - p) * (1.0 - target)
+        alpha_t = self.alpha * target + (1.0 - self.alpha) * (1.0 - target)
+        loss = alpha_t * (1.0 - p_t).clamp(min=1e-6) ** self.gamma * ce
+        return loss.mean()
+
+
+# ─── Tversky loss (asymmetric Dice — penalises false negatives more) ──────────
+
+class TverskyLoss(nn.Module):
+    """
+    Generalised Dice. beta > alpha penalises false negatives (missed foreground)
+    harder than false positives, which counteracts the model's tendency to
+    collapse to all-background on sparse masks.
+    """
+
+    def __init__(self, alpha: float = 0.3, beta: float = 0.7, smooth: float = 1e-4):
+        super().__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.smooth = smooth
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred = pred.flatten(1)
+        target = target.flatten(1)
+        tp = (pred * target).sum(dim=1)
+        fp = (pred * (1.0 - target)).sum(dim=1)
+        fn = ((1.0 - pred) * target).sum(dim=1)
+        tversky = (tp + self.smooth) / (
+            tp + self.alpha * fp + self.beta * fn + self.smooth
+        )
+        return (1.0 - tversky).mean()
+
+
+# ─── Combined mask loss (Focal + Tversky) ─────────────────────────────────────
 
 class MaskLoss(nn.Module):
-    def __init__(self, bce_weight: float = 1.0, dice_weight: float = 1.0,
-                 smooth: float = 1e-6):
+    """
+    Imbalance-aware segmentation loss = Focal + Tversky.
+
+    Replaces the previous BCE+Dice, which collapsed to all-background on this
+    dataset's sparse foreground (<1% for most classes). Focal rebalances the
+    pixel-wise term; Tversky rebalances the region overlap term.
+    """
+
+    def __init__(
+        self,
+        focal_weight: float = 1.0,
+        tversky_weight: float = 1.0,
+        smooth: float = 1e-4,
+        focal_alpha: float = 0.25,
+        focal_gamma: float = 2.0,
+        tversky_alpha: float = 0.3,
+        tversky_beta: float = 0.7,
+    ):
         super().__init__()
-        self.bce = nn.BCEWithLogitsLoss()
-        self.dice = DiceLoss(smooth)
-        self.bce_w = bce_weight
-        self.dice_w = dice_weight
+        self.focal = FocalLoss(focal_alpha, focal_gamma)
+        self.tversky = TverskyLoss(tversky_alpha, tversky_beta, smooth)
+        self.focal_w = focal_weight
+        self.tversky_w = tversky_weight
 
     def forward(
         self,
         mask_logits: torch.Tensor,  # (B, 1, H, W) — raw logits
         mask_target: torch.Tensor,  # (B, 1, H, W) — binary mask
     ) -> torch.Tensor:
-        bce = self.bce(mask_logits, mask_target)
+        focal = self.focal(mask_logits, mask_target)
         prob = torch.sigmoid(mask_logits)
-        dice = self.dice(prob, mask_target)
-        return self.bce_w * bce + self.dice_w * dice
+        tversky = self.tversky(prob, mask_target)
+        return self.focal_w * focal + self.tversky_w * tversky
 
 
 # ─── Weighted classification loss ─────────────────────────────────────────────

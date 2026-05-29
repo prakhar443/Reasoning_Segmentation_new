@@ -48,6 +48,15 @@ class DataConfig:
     image_mean: Tuple[float, ...] = (0.485, 0.456, 0.406)
     image_std: Tuple[float, ...] = (0.229, 0.224, 0.225)
 
+    # Mask handling — the '_scat' masks are continuous scattering maps, not
+    # clean binary labels, and have a different aspect ratio than the images.
+    mask_binarize: str = "otsu"          # "otsu" | "mean" | "fixed"
+    mask_resize_mode: str = "letterbox"  # "letterbox" (aspect-preserving) | "stretch"
+
+    # When False, descriptions never name the ice class — prevents the
+    # classification head from cheating via the text prompt (honest F1).
+    use_class_name_in_prompt: bool = False
+
     # Train / val / test split ratios
     train_ratio: float = 0.70
     val_ratio: float = 0.15
