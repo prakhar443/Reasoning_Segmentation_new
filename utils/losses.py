@@ -96,6 +96,11 @@ class MaskLoss(nn.Module):
     Replaces the previous BCE+Dice, which collapsed to all-background on this
     dataset's sparse foreground (<1% for most classes). Focal rebalances the
     pixel-wise term; Tversky rebalances the region overlap term.
+
+    Hyperparameter rationale vs v1:
+      focal_alpha  0.25→0.40: more foreground weight (SAR masks are still sparse)
+      tversky_beta 0.70→0.80: penalise false negatives harder; FN are the
+                              main culprit when mIoU plateaus at ~0.35
     """
 
     def __init__(
@@ -103,10 +108,10 @@ class MaskLoss(nn.Module):
         focal_weight: float = 1.0,
         tversky_weight: float = 1.0,
         smooth: float = 1e-4,
-        focal_alpha: float = 0.25,
+        focal_alpha: float = 0.40,
         focal_gamma: float = 2.0,
-        tversky_alpha: float = 0.3,
-        tversky_beta: float = 0.7,
+        tversky_alpha: float = 0.2,
+        tversky_beta: float = 0.80,
     ):
         super().__init__()
         self.focal = FocalLoss(focal_alpha, focal_gamma)
@@ -213,6 +218,7 @@ class SeaIceLoss(nn.Module):
         self.lambda_mask = train_cfg.lambda_mask
         self.lambda_cls = train_cfg.lambda_cls
         self.lambda_cot = train_cfg.lambda_cot
+        self.lambda_aux = getattr(train_cfg, "lambda_aux", 0.4)
 
     def forward(
         self,
@@ -221,7 +227,8 @@ class SeaIceLoss(nn.Module):
     ) -> dict:
         """
         Args:
-            outputs: dict from pipeline forward()
+            outputs: dict from pipeline forward(), optionally containing
+                     "aux_logits" (B,1,H/4,W/4) for deep supervision
             targets: dict with keys:
                 mask (B, 1, H, W) float32
                 label (B,) int64
@@ -251,9 +258,19 @@ class SeaIceLoss(nn.Module):
                  + self.lambda_cls  * l_cls
                  + self.lambda_cot  * l_attn)
 
+        # Deep supervision: aux mask head at 1/4 resolution
+        l_aux = mask_logits.new_tensor(0.0)
+        if "aux_logits" in outputs and outputs["aux_logits"] is not None:
+            aux_logits = outputs["aux_logits"]
+            gt_mask_ds = F.interpolate(gt_mask, size=aux_logits.shape[-2:],
+                                       mode="bilinear", align_corners=False)
+            l_aux = self.mask_loss(aux_logits, gt_mask_ds)
+            total = total + self.lambda_aux * self.lambda_mask * l_aux
+
         return {
             "loss": total,
             "loss_mask": l_mask,
             "loss_cls": l_cls,
             "loss_attn": l_attn,
+            "loss_aux": l_aux,
         }

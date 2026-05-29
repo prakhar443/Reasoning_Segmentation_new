@@ -134,13 +134,14 @@ def train_step(
     # path layout: .../dataset/<class>/images/<file> → parent.parent.name = class name
     seq_ids = [str(Path(p).parent.parent.name) for p in batch["image_path"]]
 
-    # Forward pass
+    # Forward pass — request aux logits for deep supervision during training
     with autocast('cuda', enabled=use_amp):
         outputs = model(
             images=images,
             descriptions=descriptions,
             images_np=images_np,
             sequence_ids=seq_ids,
+            return_aux=True,
         )
         loss_dict = criterion(
             outputs=outputs,
@@ -164,6 +165,7 @@ def train_step(
         "loss_mask": loss_dict["loss_mask"].item(),
         "loss_cls": loss_dict["loss_cls"].item(),
         "loss_attn": loss_dict["loss_attn"].item(),
+        "loss_aux": loss_dict["loss_aux"].item(),
         "outputs": outputs,
     }
 
@@ -243,9 +245,13 @@ def train(
     epochs = train_cfg.epochs
     grad_accum = train_cfg.grad_accum_steps
     use_amp = train_cfg.fp16 or train_cfg.bf16
+    patience = getattr(train_cfg, "early_stop_patience", 6)
 
     global_step = start_step
-    best_val_f1 = best_metric
+    # Track combined mIoU+F1 as the primary best-model metric so we do not
+    # ignore segmentation improvements once F1 has already hit its target.
+    best_combined = best_metric   # passed in as 0.0 on fresh runs
+    no_improve_count = 0          # early-stopping counter
 
     for epoch in range(start_epoch, epochs):
         model.train()
@@ -291,6 +297,7 @@ def train(
                 lr = optimizer.param_groups[0]["lr"]
                 pbar.set_postfix({
                     "loss": f"{step_result['loss']:.4f}",
+                    "aux": f"{step_result.get('loss_aux', 0.0):.4f}",
                     "lr": f"{lr:.2e}",
                 })
                 if wandb_run:
@@ -299,6 +306,7 @@ def train(
                         "train/loss_mask": step_result["loss_mask"],
                         "train/loss_cls": step_result["loss_cls"],
                         "train/loss_attn": step_result["loss_attn"],
+                        "train/loss_aux": step_result.get("loss_aux", 0.0),
                         "train/lr": lr,
                         "step": global_step,
                     })
@@ -306,31 +314,45 @@ def train(
             # Validation
             if global_step % train_cfg.eval_every == 0 and global_step > 0:
                 val_metrics = validate(model, val_loader, criterion, device)
+                val_iou = val_metrics["mean_iou"]
+                val_f1  = val_metrics["weighted_f1"]
+                # Combined metric: equal weight so both must improve together
+                combined = val_iou + val_f1
+
                 print(f"\n{'='*60}")
                 print(f"Validation @ step {global_step}")
                 print(val_metrics.get("classification_report", ""))
-                print(f"mIoU: {val_metrics['mean_iou']:.4f} | "
-                      f"F1: {val_metrics['weighted_f1']:.4f}")
+                print(f"mIoU: {val_iou:.4f} | F1: {val_f1:.4f} | "
+                      f"Combined: {combined:.4f} (best={best_combined:.4f})")
+                print(f"No-improve count: {no_improve_count}/{patience}")
                 print(f"{'='*60}\n")
 
                 if wandb_run:
                     wandb_run.log({f"val/{k}": v for k, v in val_metrics.items()
                                    if isinstance(v, (int, float))}, step=global_step)
 
-                # Save best model
-                if val_metrics["weighted_f1"] > best_val_f1:
-                    best_val_f1 = val_metrics["weighted_f1"]
+                # Save best model — criterion: mIoU + F1 combined
+                if combined > best_combined:
+                    best_combined = combined
+                    no_improve_count = 0
                     save_checkpoint(
                         model, optimizer, scheduler, scaler,
-                        epoch, global_step, best_val_f1,
+                        epoch, global_step, best_combined,
                         output_dir / "best_model.pth",
                     )
+                    print(f"  ✓ New best: mIoU={val_iou:.4f}  F1={val_f1:.4f}")
+                else:
+                    no_improve_count += 1
+                    if no_improve_count >= patience:
+                        print(f"\n⏹  Early stopping: no improvement for "
+                              f"{patience} evaluations.")
+                        return best_combined
 
             # Periodic checkpoint
             if global_step % train_cfg.save_every == 0 and global_step > 0:
                 save_checkpoint(
                     model, optimizer, scheduler, scaler,
-                    epoch, global_step, best_val_f1,
+                    epoch, global_step, best_combined,
                     output_dir / f"checkpoint_step_{global_step}.pth",
                 )
                 # Keep only last N checkpoints
@@ -346,8 +368,8 @@ def train(
         print(f"Train F1:   {train_summary['weighted_f1']:.4f}")
         print(f"{'='*60}\n")
 
-    print(f"\n🎉 Training complete! Best val F1: {best_val_f1:.4f}")
-    return best_val_f1
+    print(f"\nTraining complete! Best combined (mIoU+F1): {best_combined:.4f}")
+    return best_combined
 
 
 def cleanup_old_checkpoints(output_dir: Path, keep_last: int = 3):

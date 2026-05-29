@@ -125,6 +125,7 @@ class SeaIceSegmentationPipeline(nn.Module):
         sequence_ids: Optional[List[str]] = None,
         frame_ids: Optional[List[int]] = None,
         use_long_desc: bool = True,        # toggle short/long at inference
+        return_aux: bool = False,          # return aux logits for deep supervision
     ) -> Dict:
         """
         Full pipeline forward pass.
@@ -183,6 +184,7 @@ class SeaIceSegmentationPipeline(nn.Module):
 
         # ── Step 6: Mask decoding ─────────────────────────────────────────────
         iou_scores = torch.zeros(B, device=device)
+        aux_logits = None
 
         if self.use_sam:
             # SAM path (mask_decoder is a SAMModule, returns float binary masks)
@@ -197,7 +199,13 @@ class SeaIceSegmentationPipeline(nn.Module):
         elif self.decoder_type == "unet":
             # U-Net decodes the full-resolution image, conditioned on CLIP
             # patch tokens for ice-type semantics → sharp, image-grounded masks.
-            mask_logits = self.mask_decoder(images, patch_tokens)  # (B, 1, H, W)
+            # During training return the /4-scale aux head for deep supervision.
+            if return_aux:
+                mask_logits, aux_logits = self.mask_decoder(
+                    images, patch_tokens, return_aux=True
+                )
+            else:
+                mask_logits = self.mask_decoder(images, patch_tokens)
             masks_hw = torch.sigmoid(mask_logits)
         else:
             # Token decoder path (returns logits).
@@ -223,6 +231,7 @@ class SeaIceSegmentationPipeline(nn.Module):
 
         return {
             "mask_logits": mask_logits,          # (B, 1, H, W)
+            "aux_logits": aux_logits,             # (B, 1, H/4, W/4) or None
             "masks": masks_hw,                    # (B, 1, H, W) — sigmoid applied
             "cls_logits": cls_logits,             # (B, 6) — pre-temporal
             "cls_logits_tc": cls_logits_tc,       # (B, 6) — post-temporal smoothing

@@ -69,6 +69,12 @@ class ImageUNetDecoder(nn.Module):
         self.dec1 = _double_conv(base * 2, base)
         self.head = nn.Conv2d(base, 1, 1)
 
+        # Deep supervision: auxiliary mask head at the /4 resolution level.
+        # Provides a shorter gradient path to enc3/enc4, which helps the
+        # U-Net learn coarse foreground/background structure faster and
+        # prevents the bottleneck from being the only error signal.
+        self.aux_head = nn.Conv2d(base * 4, 1, 1)
+
     @staticmethod
     def _match(x: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:
         """Resize x to ref's spatial size if an odd input made them differ."""
@@ -77,14 +83,18 @@ class ImageUNetDecoder(nn.Module):
         return x
 
     def forward(self, image: torch.Tensor,
-                cond_tokens: Optional[torch.Tensor] = None) -> torch.Tensor:
+                cond_tokens: Optional[torch.Tensor] = None,
+                return_aux: bool = False):
         """
         Args:
             image:       (B, 3, H, W) — preprocessed SAR tensor (full resolution)
             cond_tokens: (B, N, cond_dim) — CLIP patch tokens (semantic context)
+            return_aux:  if True, also return the /4-resolution auxiliary logits
+                         for deep supervision (only used during training)
 
         Returns:
-            mask logits (B, 1, H, W)
+            mask logits (B, 1, H, W) — always
+            aux logits  (B, 1, H/4, W/4) — only when return_aux=True
         """
         e1 = self.enc1(image)            # (B, base,   H,   W)
         e2 = self.enc2(self.pool(e1))    # (B, 2base,  H/2, W/2)
@@ -108,6 +118,9 @@ class ImageUNetDecoder(nn.Module):
         if out.shape[-2:] != self.image_size:
             out = F.interpolate(out, size=self.image_size,
                                 mode="bilinear", align_corners=False)
+
+        if return_aux:
+            return out, self.aux_head(d3)   # aux is at /4 resolution
         return out
 
 

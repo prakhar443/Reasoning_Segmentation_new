@@ -163,10 +163,13 @@ class TrainConfig:
     warmup_ratio: float = 0.05
 
     # Loss weights
-    lambda_mask: float = 1.0            # BCE + Dice for segmentation mask
-    lambda_cls: float = 0.5             # CrossEntropy for 6-class head
+    # lambda_mask tripled (1→3): mask loss must dominate now that F1≥0.80 but
+    # mIoU is only 0.30-0.37; lambda_cls reduced to reduce pressure on cls head
+    lambda_mask: float = 3.0            # Focal+Tversky for segmentation mask
+    lambda_cls: float = 0.3             # CrossEntropy for 6-class head
     lambda_cot: float = 0.05            # CoT reasoning supervision (if available)
     dice_smooth: float = 1e-4
+    lambda_aux: float = 0.4             # deep-supervision aux mask loss weight (×lambda_mask)
 
     # Mixed precision
     fp16: bool = True
