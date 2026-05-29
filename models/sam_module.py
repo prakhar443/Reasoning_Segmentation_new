@@ -14,6 +14,15 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
+def _group_norm(num_channels: int) -> nn.GroupNorm:
+    """GroupNorm with a divisor-safe group count (batch-size independent,
+    unlike BatchNorm which is unusable at the batch_size=2 used on a T4)."""
+    for g in (32, 16, 8, 4, 2, 1):
+        if num_channels % g == 0:
+            return nn.GroupNorm(g, num_channels)
+    return nn.GroupNorm(1, num_channels)
+
+
 class SAMModule(nn.Module):
     """
     Wraps SAM to accept batched prompts and return binary masks.
@@ -127,55 +136,82 @@ class LightweightMaskDecoder(nn.Module):
     Lightweight alternative to SAM for training on GPU-constrained setups.
     Takes fused visual features and decodes a segmentation mask without SAM.
     Useful when SAM cannot be included due to memory constraints.
+
+    Two design choices that matter for this dataset:
+      * GroupNorm (not BatchNorm) — the T4 path trains at batch_size=2, where
+        BatchNorm statistics are pure noise and make the mask output oscillate
+        wildly / collapse to a constant. GroupNorm is batch-size independent.
+      * Optional `spatial_tokens` skip — the fused tokens are scrambled by 4
+        layers of cross-attention against a *generic* text prompt, so they carry
+        little image-specific spatial signal. Feeding the raw CLIP patch tokens
+        (which preserve spatial layout) gives the decoder something real to
+        segment, instead of producing a near-constant blob.
     """
 
-    def __init__(self, in_dim: int, image_size: Tuple[int, int] = (512, 512)):
+    def __init__(self, in_dim: int, image_size: Tuple[int, int] = (512, 512),
+                 spatial_dim: int = 0):
         super().__init__()
-        self.image_size = image_size
-        h, w = image_size
-        side = int(256 ** 0.5)  # assume 256 patch tokens → 16x16
+        self.image_size = tuple(image_size)
+        self.spatial_dim = int(spatial_dim)
+        proj_in = in_dim + self.spatial_dim
 
-        # Progressive upsampling decoder
-        self.decoder = nn.Sequential(
-            nn.Linear(in_dim, 256),
+        # Token → 256-d projection (input to the conv upsampler)
+        self.token_proj = nn.Sequential(
+            nn.LayerNorm(proj_in),
+            nn.Linear(proj_in, 256),
             nn.GELU(),
         )
 
-        # Convolutional upsampler
+        # Convolutional upsampler (16x16 → 512x512), GroupNorm throughout
         self.upsample = nn.Sequential(
             # 16x16 → 64x64
             nn.ConvTranspose2d(256, 128, kernel_size=4, stride=4),
-            nn.BatchNorm2d(128),
-            nn.GELU(),
+            _group_norm(128), nn.GELU(),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            _group_norm(128), nn.GELU(),
             # 64x64 → 128x128
             nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2),
-            nn.BatchNorm2d(64),
-            nn.GELU(),
+            _group_norm(64), nn.GELU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            _group_norm(64), nn.GELU(),
             # 128x128 → 256x256
             nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
-            nn.BatchNorm2d(32),
-            nn.GELU(),
+            _group_norm(32), nn.GELU(),
             # 256x256 → 512x512
-            nn.ConvTranspose2d(32, 1, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2),
+            _group_norm(16), nn.GELU(),
+            nn.Conv2d(16, 1, kernel_size=1),
         )
 
-    def forward(self, fused_tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, fused_tokens: torch.Tensor,
+                spatial_tokens: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Args:
-            fused_tokens: (B, N, fusion_dim)
+            fused_tokens:   (B, N, fusion_dim)
+            spatial_tokens: (B, N, spatial_dim) — CLIP patch tokens (optional skip)
 
         Returns:
             masks: (B, 1, H, W) — raw logits (apply sigmoid for probability)
         """
-        B, N, D = fused_tokens.shape
+        if self.spatial_dim > 0:
+            assert spatial_tokens is not None, (
+                "LightweightMaskDecoder built with spatial_dim>0 but no "
+                "spatial_tokens were passed to forward()."
+            )
+            x = torch.cat([fused_tokens, spatial_tokens], dim=-1)
+        else:
+            x = fused_tokens
+
+        B, N, _ = x.shape
         side = int(N ** 0.5)
 
-        x = self.decoder(fused_tokens)          # (B, N, 256)
+        x = self.token_proj(x)                  # (B, N, 256)
         x = x.permute(0, 2, 1)                  # (B, 256, N)
         x = x.reshape(B, 256, side, side)       # (B, 256, side, side)
         masks = self.upsample(x)                 # (B, 1, H, W)
 
         # Resize to exact image_size
-        masks = F.interpolate(masks, size=self.image_size,
-                               mode="bilinear", align_corners=False)
+        if masks.shape[-2:] != self.image_size:
+            masks = F.interpolate(masks, size=self.image_size,
+                                   mode="bilinear", align_corners=False)
         return masks

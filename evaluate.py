@@ -182,12 +182,13 @@ class Evaluator:
             for img in images
         ]
 
-        # Forward
+        # Forward — sequence_id = ice-class folder name (.../<class>/images/<file>),
+        # not the literal "images" dir that p.split('/')[-2] returned.
         outputs = self.model(
             images=images,
             descriptions=descriptions,
             images_np=images_np,
-            sequence_ids=[p.split("/")[-2] for p in image_paths],
+            sequence_ids=[str(Path(p).parent.parent.name) for p in image_paths],
         )
 
         # Compute metrics

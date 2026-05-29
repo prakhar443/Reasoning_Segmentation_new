@@ -84,6 +84,7 @@ class SeaIceSegmentationPipeline(nn.Module):
                 self.mask_decoder = LightweightMaskDecoder(
                     in_dim=model_cfg.fusion_dim,
                     image_size=default_cfg.data.image_size,
+                    spatial_dim=model_cfg.clip_hidden_dim,
                 )
                 self.use_sam = False
         else:
@@ -91,6 +92,7 @@ class SeaIceSegmentationPipeline(nn.Module):
             self.mask_decoder = LightweightMaskDecoder(
                 in_dim=model_cfg.fusion_dim,
                 image_size=default_cfg.data.image_size,
+                spatial_dim=model_cfg.clip_hidden_dim,
             )
 
         # ── Module 7: 6-class classification head ─────────────────────────────
@@ -179,8 +181,10 @@ class SeaIceSegmentationPipeline(nn.Module):
             masks_hw = masks_hw.to(device)
             mask_logits = masks_hw  # already binary; no sigmoid needed for loss
         else:
-            # Lightweight decoder path (returns logits)
-            mask_logits = self.mask_decoder(fused_tokens)  # (B, 1, H, W)
+            # Lightweight decoder path (returns logits).
+            # patch_tokens give the decoder image-specific spatial features
+            # (the fused tokens alone are nearly input-independent here).
+            mask_logits = self.mask_decoder(fused_tokens, patch_tokens)  # (B, 1, H, W)
             masks_hw = torch.sigmoid(mask_logits)
 
         # ── Step 7: Ice type classification ───────────────────────────────────

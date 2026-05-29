@@ -82,7 +82,7 @@ class ModelConfig:
     clip_freeze: bool = True             # freeze base weights; only LoRA trains
     lora_rank: int = 8
     lora_alpha: int = 16
-    lora_dropout: float = 0.05
+    lora_dropout: float = 0.10           # ↑ from 0.05 — curb overfitting on ~420 imgs
     lora_target_modules: List[str] = field(
         default_factory=lambda: ["q_proj", "v_proj", "k_proj", "out_proj"]
     )
@@ -117,8 +117,10 @@ class ModelConfig:
     prompt_min_area: int = 500           # min connected component area (pixels)
 
     # ── 6-class classification head ───────────────────────────────────────────
-    cls_hidden_dim: int = 512
-    cls_dropout: float = 0.10
+    # Smaller head + heavier dropout: train F1 was hitting 1.0 (pure memorization)
+    # while val F1 collapsed — classic over-capacity for a ~420-image dataset.
+    cls_hidden_dim: int = 256            # ↓ from 512
+    cls_dropout: float = 0.30            # ↑ from 0.10
     num_classes: int = len(ICE_CLASSES)
 
     # ── Temporal consistency ──────────────────────────────────────────────────
@@ -144,7 +146,7 @@ class TrainConfig:
     lr: float = 5e-5
     lora_lr: float = 2e-4               # LoRA adapters can use higher LR
     cls_head_lr: float = 1e-4
-    weight_decay: float = 0.01
+    weight_decay: float = 0.05          # ↑ from 0.01 — stronger L2 vs overfitting
     betas: Tuple[float, float] = (0.9, 0.999)
 
     # Scheduler
@@ -161,8 +163,9 @@ class TrainConfig:
     fp16: bool = True
     bf16: bool = False
 
-    # Early stopping
-    early_stop_patience: int = 10       # stop if val F1 doesn't improve for N evals
+    # Early stopping — val F1 peaked ~epoch 8 then decayed; 6 keeps the best
+    # checkpoint without wasting epochs deep in the overfitting regime.
+    early_stop_patience: int = 6        # stop if val F1 doesn't improve for N evals
 
     # Logging & checkpointing
     log_every: int = 10
