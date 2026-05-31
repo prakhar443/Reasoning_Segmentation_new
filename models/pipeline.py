@@ -215,12 +215,18 @@ class SeaIceSegmentationPipeline(nn.Module):
             masks_hw = torch.sigmoid(mask_logits)
 
         # ── Step 7: Ice type classification ───────────────────────────────────
-        cls_logits = self.classifier(fused_tokens, masks_hw, sent_emb)
+        # Detach masks_hw before classification and temporal paths so that
+        # cls_loss does NOT backpropagate through the U-Net.  Only mask_loss
+        # should train the decoder; the classification gradient through
+        # masks_hw → mask_logits was fighting the mask signal and preventing
+        # the U-Net from breaking out of the all-foreground plateau.
+        masks_hw_d = masks_hw.detach()
+        cls_logits = self.classifier(fused_tokens, masks_hw_d, sent_emb)
         # cls_logits: (B, 6)
 
         # ── Step 8: Temporal consistency ──────────────────────────────────────
-        # Compute mask embedding for temporal comparison
-        mask_emb = self._pool_mask_features(fused_tokens, masks_hw)  # (B, D)
+        # Use detached masks for the temporal bank too (same reason).
+        mask_emb = self._pool_mask_features(fused_tokens, masks_hw_d)  # (B, D)
 
         cls_logits_tc = self.temporal(
             cls_logits, mask_emb, sequence_ids, frame_ids
