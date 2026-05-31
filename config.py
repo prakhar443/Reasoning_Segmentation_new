@@ -51,7 +51,14 @@ class DataConfig:
     # Mask handling — the '_scat' masks are continuous scattering maps, not
     # clean binary labels, and have a different aspect ratio than the images.
     mask_binarize: str = "otsu"          # "otsu" | "mean" | "fixed"
-    mask_resize_mode: str = "letterbox"  # "letterbox" (aspect-preserving) | "stretch"
+    # Images are 256×256 (square); the `_scat` masks are ~138×187 (portrait).
+    # They cover the SAME scene at different sampling resolutions, so the mask
+    # must be resized to the image's extent ("stretch") to stay spatially
+    # aligned. "letterbox" pads image and mask independently — because their
+    # aspect ratios differ, the mask foreground ends up offset from the image
+    # content and the target becomes unlearnable (mIoU pins at the all-fg
+    # fraction ~0.32). Keep "stretch" unless image and mask share an aspect ratio.
+    mask_resize_mode: str = "stretch"    # "stretch" (aligned) | "letterbox"
 
     # When False, descriptions never name the ice class — prevents the
     # classification head from cheating via the text prompt (honest F1).
