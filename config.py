@@ -176,7 +176,7 @@ class TrainConfig:
     lambda_cls: float = 0.5             # CrossEntropy for 6-class head
     lambda_cot: float = 0.05            # CoT reasoning supervision (if available)
     dice_smooth: float = 1e-4
-    lambda_aux: float = 0.4             # deep-supervision aux mask loss weight (×lambda_mask)
+    lambda_aux: float = 0.2             # ↓ from 0.4: aux was running ≥1.0 and driving overflow
     grad_clip_norm: float = 1.0         # global grad-norm clip (0.5 starved the U-Net)
 
     # Mixed precision

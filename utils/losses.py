@@ -263,6 +263,12 @@ class SeaIceLoss(nn.Module):
         l_aux = mask_logits.new_tensor(0.0)
         if "aux_logits" in outputs and outputs["aux_logits"] is not None:
             aux_logits = outputs["aux_logits"]
+            # Clamp before loss: aux_head is a bare Conv2d with no normalisation.
+            # In FP16, its logits can grow to ≥65504 after several epochs, causing
+            # FocalLoss backward to produce Inf gradients → NaN weights. BF16 has
+            # FP32's exponent range so this guard is belt-and-suspenders, but it also
+            # prevents pathologically large aux losses from dominating the gradient.
+            aux_logits = aux_logits.clamp(-10.0, 10.0)
             gt_mask_ds = F.interpolate(gt_mask, size=aux_logits.shape[-2:],
                                        mode="bilinear", align_corners=False)
             l_aux = self.mask_loss(aux_logits, gt_mask_ds)
