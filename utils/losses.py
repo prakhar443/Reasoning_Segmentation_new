@@ -91,16 +91,17 @@ class TverskyLoss(nn.Module):
 
 class MaskLoss(nn.Module):
     """
-    Imbalance-aware segmentation loss = Focal + Tversky.
+    Segmentation loss = Focal + (balanced) Tversky/Dice.
 
-    Replaces the previous BCE+Dice, which collapsed to all-background on this
-    dataset's sparse foreground (<1% for most classes). Focal rebalances the
-    pixel-wise term; Tversky rebalances the region overlap term.
+    IMPORTANT — these `_scat` masks are NOT sparse: Otsu binarisation yields
+    ~30%+ foreground. An asymmetric, false-negative-heavy loss (tversky_beta≫
+    tversky_alpha) therefore makes "predict everything as foreground" a stable
+    minimum: zero false negatives, and IoU pins at the mean foreground fraction
+    (~0.32) for every image — exactly the flat-mIoU collapse we observed.
 
-    Hyperparameter rationale vs v1:
-      focal_alpha  0.25→0.40: more foreground weight (SAR masks are still sparse)
-      tversky_beta 0.70→0.80: penalise false negatives harder; FN are the
-                              main culprit when mIoU plateaus at ~0.35
+    Balanced settings (focal_alpha=0.5, tversky_alpha=tversky_beta=0.5, i.e.
+    Dice) penalise false positives and false negatives equally, so all-foreground
+    is no longer free and the network has to actually localise the region.
     """
 
     def __init__(
@@ -108,10 +109,10 @@ class MaskLoss(nn.Module):
         focal_weight: float = 1.0,
         tversky_weight: float = 1.0,
         smooth: float = 1e-4,
-        focal_alpha: float = 0.40,
+        focal_alpha: float = 0.5,
         focal_gamma: float = 2.0,
-        tversky_alpha: float = 0.2,
-        tversky_beta: float = 0.80,
+        tversky_alpha: float = 0.5,
+        tversky_beta: float = 0.5,
     ):
         super().__init__()
         self.focal = FocalLoss(focal_alpha, focal_gamma)

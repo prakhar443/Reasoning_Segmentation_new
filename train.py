@@ -246,12 +246,15 @@ def train(
     grad_accum = train_cfg.grad_accum_steps
     use_amp = train_cfg.fp16 or train_cfg.bf16
     patience = getattr(train_cfg, "early_stop_patience", 6)
+    clip_norm = getattr(train_cfg, "grad_clip_norm", 1.0)
 
     global_step = start_step
-    # Track combined mIoU+F1 as the primary best-model metric so we do not
-    # ignore segmentation improvements once F1 has already hit its target.
-    best_combined = best_metric   # passed in as 0.0 on fresh runs
-    no_improve_count = 0          # early-stopping counter
+    # Segmentation is the primary task, so the best checkpoint and early
+    # stopping are driven by mIoU. F1 is tracked and reported separately
+    # (as in standard segmentation papers — the two are not combined).
+    best_miou = best_metric       # passed in as 0.0 on fresh runs
+    best_f1 = 0.0                 # reported separately, not used for stopping
+    no_improve_count = 0          # early-stopping counter (on mIoU)
 
     for epoch in range(start_epoch, epochs):
         model.train()
@@ -272,11 +275,11 @@ def train(
             if (batch_idx + 1) % grad_accum == 0:
                 if scaler:
                     scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm)
                     scaler.step(optimizer)
                     scaler.update()
                 else:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm)
                     optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
@@ -316,43 +319,46 @@ def train(
                 val_metrics = validate(model, val_loader, criterion, device)
                 val_iou = val_metrics["mean_iou"]
                 val_f1  = val_metrics["weighted_f1"]
-                # Combined metric: equal weight so both must improve together
-                combined = val_iou + val_f1
 
                 print(f"\n{'='*60}")
                 print(f"Validation @ step {global_step}")
                 print(val_metrics.get("classification_report", ""))
-                print(f"mIoU: {val_iou:.4f} | F1: {val_f1:.4f} | "
-                      f"Combined: {combined:.4f} (best={best_combined:.4f})")
-                print(f"No-improve count: {no_improve_count}/{patience}")
+                print(f"mIoU: {val_iou:.4f} (best={best_miou:.4f}) | "
+                      f"F1: {val_f1:.4f} (best={best_f1:.4f})")
+                print(f"No-improve count (mIoU): {no_improve_count}/{patience}")
                 print(f"{'='*60}\n")
 
                 if wandb_run:
                     wandb_run.log({f"val/{k}": v for k, v in val_metrics.items()
                                    if isinstance(v, (int, float))}, step=global_step)
 
-                # Save best model — criterion: mIoU + F1 combined
-                if combined > best_combined:
-                    best_combined = combined
+                # Track best F1 separately (for reporting only)
+                if val_f1 > best_f1:
+                    best_f1 = val_f1
+
+                # Best model + early stopping driven by mIoU (primary task)
+                if val_iou > best_miou:
+                    best_miou = val_iou
                     no_improve_count = 0
                     save_checkpoint(
                         model, optimizer, scheduler, scaler,
-                        epoch, global_step, best_combined,
+                        epoch, global_step, best_miou,
                         output_dir / "best_model.pth",
                     )
-                    print(f"  ✓ New best: mIoU={val_iou:.4f}  F1={val_f1:.4f}")
+                    print(f"  ✓ New best mIoU={val_iou:.4f} (F1 here={val_f1:.4f})")
                 else:
                     no_improve_count += 1
                     if no_improve_count >= patience:
-                        print(f"\n⏹  Early stopping: no improvement for "
-                              f"{patience} evaluations.")
-                        return best_combined
+                        print(f"\n⏹  Early stopping: mIoU did not improve for "
+                              f"{patience} evaluations. "
+                              f"Best mIoU={best_miou:.4f}  Best F1={best_f1:.4f}")
+                        return best_miou
 
             # Periodic checkpoint
             if global_step % train_cfg.save_every == 0 and global_step > 0:
                 save_checkpoint(
                     model, optimizer, scheduler, scaler,
-                    epoch, global_step, best_combined,
+                    epoch, global_step, best_miou,
                     output_dir / f"checkpoint_step_{global_step}.pth",
                 )
                 # Keep only last N checkpoints
@@ -368,8 +374,8 @@ def train(
         print(f"Train F1:   {train_summary['weighted_f1']:.4f}")
         print(f"{'='*60}\n")
 
-    print(f"\nTraining complete! Best combined (mIoU+F1): {best_combined:.4f}")
-    return best_combined
+    print(f"\nTraining complete! Best mIoU: {best_miou:.4f} | Best F1: {best_f1:.4f}")
+    return best_miou
 
 
 def cleanup_old_checkpoints(output_dir: Path, keep_last: int = 3):
