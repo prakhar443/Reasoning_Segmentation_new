@@ -161,7 +161,7 @@ class TrainConfig:
     lr: float = 5e-5
     lora_lr: float = 2e-4               # LoRA adapters can use higher LR
     cls_head_lr: float = 1e-4
-    decoder_lr: float = 3e-4            # U-Net trains from scratch — needs higher LR
+    decoder_lr: float = 2e-4            # lower now that real mask signal exists (was 3e-4)
     weight_decay: float = 0.05          # ↑ from 0.01 — stronger L2 vs overfitting
     betas: Tuple[float, float] = (0.9, 0.999)
 
@@ -183,9 +183,9 @@ class TrainConfig:
     fp16: bool = True
     bf16: bool = False
 
-    # Early stopping — val F1 peaked ~epoch 8 then decayed; 6 keeps the best
-    # checkpoint without wasting epochs deep in the overfitting regime.
-    early_stop_patience: int = 6        # stop if val F1 doesn't improve for N evals
+    # Early stopping on val mIoU. Raised to 12 because mask alignment was the
+    # blocker until epoch 13 of the prior run; F1 was still trending up at stop.
+    early_stop_patience: int = 12       # stop if val mIoU doesn't improve for N evals
 
     # Logging & checkpointing
     log_every: int = 10

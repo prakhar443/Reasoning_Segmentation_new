@@ -64,11 +64,11 @@ def get_train_augmentations(image_size: Tuple[int, int]) -> A.Compose:
     h, w = image_size
     # Only RandomResizedCrop differs between 1.x and 2.x
     if _ALBU2:
-        crop = A.RandomResizedCrop(size=(h, w), scale=(0.7, 1.0), p=1.0)
+        crop = A.RandomResizedCrop(size=(h, w), scale=(0.85, 1.0), p=1.0)
         noise = A.GaussNoise(p=1.0)
         elastic = A.ElasticTransform(p=0.2)
     else:
-        crop = A.RandomResizedCrop(height=h, width=w, scale=(0.7, 1.0), p=1.0)
+        crop = A.RandomResizedCrop(height=h, width=w, scale=(0.85, 1.0), p=1.0)
         noise = A.GaussNoise(var_limit=(0.001, 0.005), p=1.0)
         elastic = A.ElasticTransform(alpha=30, sigma=5, p=0.2)
 
