@@ -1,6 +1,12 @@
 """
 models/depth_encoder.py — DepthAnything V2 surface-topology feature extractor.
 
+⚠️  NOT USED IN PUBLISHED RESULTS. Evaluated as an alternative and excluded:
+    adding this branch produced no measurable change in outputs (bit-identical
+    metrics in two independent runs). Retained for ablation reproducibility
+    only; not a claimed contribution. See DOCUMENTATION/PAPER_SCOPE.md and
+    DOCUMENTATION/CODE_MAP.md.
+
 Provides complementary depth/surface-structure features alongside CLIP.
 For sea ice: encodes pressure ridges, hummocking, and flat slab boundaries.
 Output features are concatenated with CLIP patch tokens before fusion.

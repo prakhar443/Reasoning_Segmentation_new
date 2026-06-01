@@ -1,6 +1,12 @@
 """
 models/sam_module.py — Segment Anything Model (SAM) wrapper.
 
+⚠️  NOT USED IN PUBLISHED RESULTS. The published model uses the lighter
+    image-conditioned U-Net decoder (decoder_type='unet'); SAM is an optional
+    alternative backend that was not evaluated in the final model. Retained as
+    an optional decoder path; not a claimed contribution. See DOCUMENTATION/
+    PAPER_SCOPE.md and DOCUMENTATION/CODE_MAP.md.
+
 Takes geometric prompts (boxes + points) from the prompt generator
 and produces pixel-level binary masks with IoU confidence scores.
 Supports SAM1 (vit_h/l/b) and SAM2 (for temporal propagation).

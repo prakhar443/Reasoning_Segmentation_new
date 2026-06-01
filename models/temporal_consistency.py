@@ -1,6 +1,11 @@
 """
 models/temporal_consistency.py — Temporal consistency module for sequential sea ice images.
 
+⚠️  NOT USED IN PUBLISHED RESULTS (temporal_mode=False by default). Evaluated
+    and excluded: no measurable benefit on the single-scene evaluation used in
+    the paper. Retained for future multi-temporal work; not a claimed
+    contribution. See DOCUMENTATION/PAPER_SCOPE.md and DOCUMENTATION/CODE_MAP.md.
+
 Maintains a feature memory bank of recent frames and enforces mask continuity
 via cosine similarity gating. Prevents spurious frame-to-frame class flips.
 """

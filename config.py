@@ -81,6 +81,20 @@ class DataConfig:
 
 
 # ─── Model config ─────────────────────────────────────────────────────────────
+#
+# PUBLISHED MODEL CONFIGURATION (the 5-module pipeline reported in the paper):
+#   - clip_model + LoRA            → visual encoder            [CLAIMED]
+#   - llm_backend = cross_attn_only→ cross-attention fusion    [CLAIMED]
+#   - decoder_type = unet          → segmentation decoder      [CLAIMED]
+#   - 6-class classifier head                                  [CLAIMED]
+#
+# The defaults below reproduce the published model exactly: `python train.py`
+# with no extra flags trains the 5-module pipeline. The depth encoder, SAM
+# decoder, temporal module and BLIP-2/LLaVA backends remain in the codebase as
+# *alternatives we evaluated and excluded* (see DOCUMENTATION/PAPER_SCOPE.md and
+# CODE_MAP.md) — they are retained for ablation reproducibility, not claimed as
+# contributions, and are OFF by default.
+# ──────────────────────────────────────────────────────────────────────────────
 
 @dataclass
 class ModelConfig:
@@ -99,9 +113,11 @@ class ModelConfig:
     depth_freeze: bool = True
     depth_feature_dim: int = 256
 
-    # ── Reasoning / CoT module (cross-attention + LLM head) ───────────────────
-    # Using BLIP-2 or LLaVA for the language side; set llm_backend accordingly
-    llm_backend: str = "blip2"           # options: "blip2", "llava", "cross_attn_only"
+    # ── Reasoning / fusion module ─────────────────────────────────────────────
+    # PUBLISHED MODEL uses "cross_attn_only" (image↔text cross-attention fusion,
+    # no language generation). "blip2"/"llava" are alternative backends that were
+    # NOT used in the reported results and do not generate text in this pipeline.
+    llm_backend: str = "cross_attn_only" # options: "cross_attn_only" (published), "blip2", "llava"
     blip2_model: str = "Salesforce/blip2-opt-2.7b"
     llava_model: str = "llava-hf/llava-1.5-7b-hf"
     use_short_description: bool = True
@@ -219,7 +235,7 @@ class InferenceConfig:
     batch_size: int = 1
     use_tta: bool = False                # test-time augmentation
     conf_threshold: float = 0.50
-    temporal_mode: bool = True           # enable temporal consistency at inference
+    temporal_mode: bool = False          # temporal consistency: evaluated, no benefit, OFF for published model
     output_dir: str = "results"
     save_masks: bool = True
     save_overlay: bool = True
