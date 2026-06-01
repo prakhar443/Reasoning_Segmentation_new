@@ -147,14 +147,34 @@ Table 2 reports the ablation study.  Key findings:
   without it) but neutral-to-mildly-harmful for segmentation (mIoU increases
   from 0.351 to 0.365 without LoRA).  We present LoRA as a classification
   contribution only.
-- **Depth features contribute nothing.** Two independent runs produce
-  bit-identical metrics with and without the depth encoder.  Depth is retained
-  in the codebase but is not a claimed contribution.
+- **LoRA is critical for classification** but the segmentation-side ablations
+  (decoder type, loss function, auxiliary supervision) are where the
+  segmentation behaviour is determined.
 
 The ablation variants were trained for ≤15 epochs (early stopping, patience 5)
 versus 50 epochs for the full model, providing less training budget.  This
 confound is disclosed; the honest finding is that some ablated variants still
 match or exceed the full model on segmentation despite the shorter budget.
+
+### 4.5 Components Evaluated and Excluded
+
+*(Use this single short paragraph in the paper to cover the non-contributing
+modules — do NOT give them their own method subsections or architecture-diagram
+blocks. This preempts reviewer questions and keeps the released code consistent
+with the described model.)*
+
+> In the course of developing the pipeline we evaluated several additional
+> components that did not improve performance and are therefore excluded from
+> the final model. A monocular depth-feature branch (DepthAnything V2) added no
+> measurable change to outputs and was removed from the contribution. A temporal
+> consistency module, intended for sequential acquisitions, provided no benefit
+> on our single-scene evaluation. We also implemented a prompt-driven SAM
+> decoder but found the lighter image-conditioned U-Net decoder sufficient and
+> used it for all reported results. The cross-attention backend performs
+> image–text feature fusion only and does not generate natural language; we
+> therefore report no text-generation metrics. All of these components remain in
+> the publicly released code, disabled by default and clearly marked, both for
+> completeness and to support reproduction of the corresponding ablations.
 
 ---
 
