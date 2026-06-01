@@ -110,8 +110,12 @@ full model. Where an ablated variant wins, the table shows it.
 
 - **Old Ice classification fails (F1 = 0.000).** The model *segments* Old Ice
   well (IoU 0.513, second-best of all classes) but misclassifies all 15 test
-  samples. With only 52 training images (the smallest class), the classifier
-  does not generalize for this type. Reported openly.
+  samples. The dataset is balanced (70 training images per class); image-level
+  statistics show Old Ice (mean brightness 141.5, std 28.5) is nearly
+  identical to Young Ice (141.5, 27.3) and First Year Ice (143.3, 28.6),
+  making it visually the hardest class to distinguish. The classifier
+  collapses all Old Ice test predictions to one of those neighbouring classes.
+  Reported openly as a visual-ambiguity failure, not a data-imbalance issue.
 - **Over-segmentation tendency** (precision 0.444, recall 0.640): the model
   favors recall of ice pixels at the cost of precision. Calibrated far better
   than before (over-seg 0.94×–1.86×) but not eliminated.
