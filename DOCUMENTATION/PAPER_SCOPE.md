@@ -1,65 +1,110 @@
 # Paper Scope & Honest Reporting Decisions
 
-This document records *what the paper claims*, *what it reports*, and *why*
-certain metrics/ablations are included or excluded. The guiding rule:
+This document records *what the paper claims*, *what it reports*, and *why*,
+strictly matched to the experimental evidence. The guiding rule:
 
 > We may choose which metrics to report, but we never make a claim that an
-> omitted metric or ablation would contradict.
+> experiment we ran would contradict. Where an ablation shows a component does
+> not help, we say so.
 
-## Claimed contribution (re-scoped to what the evidence supports)
+All numbers below are **test-set** results on the stratified split (15 samples
+per class in val and test). The ablation variants were retrained for ≤15 epochs
+(early stopping, patience 5); the full model is the main 50-epoch checkpoint.
+This training-budget difference is disclosed in the ablation table caption and
+is a known limitation of the ablation (the variants had less training budget,
+yet several still match or exceed the full configuration).
 
-The contribution is a **CLIP-LoRA + image-conditioned U-Net pipeline for SAR
-sea-ice region segmentation and 6-class ice-type classification**, with:
+## Headline results (test set)
 
-1. **LoRA-adapted CLIP ViT-L/14** visual encoding for SAR (ablation shows it
-   helps — kept).
-2. **Full-resolution U-Net mask decoder** conditioned on CLIP patch tokens
-   (ablation vs. coarse token decoder shows it helps — kept).
-3. **Combined Focal + Tversky/Dice objective** (loss ablations show the
-   combination helps — kept).
-4. **Depth-augmented multimodal fusion** that improves *classification*
-   (ablation: removing depth drops weighted-F1 ~0.62 → ~0.58 — kept as a
-   *classification* contribution, not a segmentation one).
+**Segmentation (region-level):** mIoU 0.351, cIoU 0.456, Dice 0.442, pixel
+accuracy 0.656. Precision 0.444 / recall 0.640 (reported as a
+limitation — the model still over-predicts foreground, but no longer floods it:
+per-class over-segmentation ratios are 0.94×–1.86×, down from up to 5.4× before
+loss rebalancing).
 
-## Explicitly NOT claimed (and therefore not reported as contributions)
+**Classification:** accuracy 0.833, macro-F1 0.778, weighted-F1 0.778. Per-class
+F1: Floating Ice, Glaciers, Icebergs, First Year Ice ≈ 1.0; Young Ice 0.667;
+**Old Ice 0.000** (see limitations).
 
-- **Temporal consistency.** The ablation shows removing it *improves* F1
-  (0.6212 → 0.6300). It is not a positive contribution on this dataset, so it
-  is **removed from the claimed method and from the ablation table.** The
-  module remains in the codebase but is disabled / not part of the evaluated
-  pipeline. We do not claim it.
+## Claimed contribution (re-scoped to what the ablations support)
+
+The contribution is a **CLIP + image-conditioned U-Net pipeline for SAR
+sea-ice region segmentation and 6-class ice-type classification**, trained with
+a **Tversky-dominant segmentation objective**. Specifically, the ablation
+evidence supports:
+
+1. **Tversky loss is the key segmentation driver.** Tversky-only achieves the
+   best segmentation on the test set (mIoU 0.389, Dice 0.493). Focal-only
+   collapses it (mIoU 0.252). The combined Focal+Tversky objective used in the
+   full model trades a small amount of mIoU for a more balanced
+   precision/recall operating point; **we do not claim the combination
+   maximizes mIoU** — it does not.
+2. **Auxiliary deep-supervision loss helps mIoU.** Removing it drops mIoU
+   0.351 → 0.324. Kept as a contribution.
+3. **LoRA adaptation helps classification, not segmentation.** Removing LoRA
+   (frozen CLIP) drops weighted-F1 0.778 → 0.534, but actually *raises*
+   segmentation mIoU slightly (0.351 → 0.365). We therefore present LoRA as a
+   **classification** contribution only, and state plainly that it does not
+   improve segmentation on this dataset.
+
+## Explicitly NOT claimed (removed because the evidence does not support it)
+
+- **Depth features.** The "w/o Depth" ablation is **bit-identical** to the full
+  model across every metric, in two independent runs. Depth contributes
+  nothing measurable on this dataset. The earlier claim that "removing depth
+  drops weighted-F1 0.62→0.58" was **not supported by any experiment** and has
+  been removed. Depth remains in the codebase but is **not claimed** as a
+  contribution.
+- **U-Net decoder superiority.** On the test set the U-Net decoder (mIoU 0.351,
+  Dice 0.442) does **not** clearly beat the token decoder (mIoU 0.344, Dice
+  0.455 — higher Dice). We do **not** claim the U-Net decoder improves
+  segmentation accuracy; at most it is comparable. (It was retained for
+  full-resolution masks, not for a metric win.)
+- **Temporal consistency.** A prior ablation showed it does not help F1; removed
+  from the claimed method and from the ablation table. Remains in the codebase,
+  disabled.
 - **Free-form text generation.** The trained backend (`cross_attn_only`) does
-  **not** generate language; it classifies and the demo response is templated.
-  Therefore **BLEU/ROUGE/CIDEr are NOT reported** — reporting caption-quality
-  metrics for a non-generative model would be misleading. The reasoning demo
-  is presented honestly as a templated, class-conditioned response.
+  not generate language; the reasoning demo is a templated, class-conditioned
+  response. **BLEU/ROUGE/CIDEr are not reported** — they would be meaningless
+  for a non-generative model.
 
 ## Metrics reported (match the claims)
 
 **Segmentation (region-level):** mIoU, cumulative IoU (cIoU), Dice, pixel
-accuracy. Segmentation is evaluated and described at the **region level**.
+accuracy. Evaluated and described at the **region level**.
 
 **Classification:** accuracy, macro-F1, weighted-F1, per-class F1 (all classes
-shown, including weak ones — no class is hidden).
+shown, including Old Ice at 0.0 — no class is hidden).
+
+**Ablation table:** bold marks the **true best value in each column**, not the
+full model. Where an ablated variant wins, the table shows it.
 
 ## Stated limitations (reported, not hidden)
 
-- **Boundary delineation is coarse.** Boundary IoU is near zero; the masks
-  capture region extent, not fine edges. This is stated as a limitation rather
-  than reported as a headline metric, and no claim of sharp boundary accuracy
-  is made anywhere in the paper.
-- **Over-segmentation tendency** (precision ≈ 0.42, recall ≈ 0.84): the model
-  favors high recall of ice pixels at the cost of precision. Reported honestly
-  in the limitations.
+- **Old Ice classification fails (F1 = 0.000).** The model *segments* Old Ice
+  well (IoU 0.513, second-best of all classes) but misclassifies all 15 test
+  samples. With only 52 training images (the smallest class), the classifier
+  does not generalize for this type. Reported openly.
+- **Over-segmentation tendency** (precision 0.444, recall 0.640): the model
+  favors recall of ice pixels at the cost of precision. Calibrated far better
+  than before (over-seg 0.94×–1.86×) but not eliminated.
+- **Coarse boundaries.** Boundary IoU is near zero; masks capture region extent,
+  not fine edges. Stated as a limitation, never reported as a headline metric.
+- **Classification overfits the small validation set** (val F1 reaches 1.0
+  within 1–2 epochs on 90 samples). Only test F1 is treated as meaningful.
+- **Ablation training-budget mismatch.** Ablated variants used ≤15 epochs vs.
+  the full model's 50; the comparison is not fully controlled. Disclosed in the
+  table caption.
 - **Performance ceiling from supervision.** Targets are Otsu-binarized
-  scattering maps; train mIoU ≈ val mIoU throughout training, indicating the
-  ceiling is a property of the supervision, not optimization.
+  scattering maps; train mIoU ≈ val mIoU throughout, indicating the ceiling is a
+  property of the supervision, not optimization.
 
 ## Why this is honest scoping, not cherry-picking
 
-Every removed item is removed *together with* the claim it would have
-supported: temporal is dropped from the method, so its ablation is not needed;
-text metrics are dropped because no generation is claimed; boundary IoU is
-omitted from the headline but the boundary limitation is explicitly stated.
-A reviewer replicating any reported experiment will find numbers consistent
-with every claim in the paper.
+Every removed claim is removed *because an experiment we ran failed to support
+it* — depth (no effect), U-Net superiority (token decoder comparable), temporal
+(hurts F1), text metrics (no generation). Every retained claim (Tversky as the
+key loss, aux loss, LoRA-for-classification) is the conclusion the ablation
+actually points to, even where that means the full model is not the best row in
+the table. A reviewer replicating any experiment will find numbers consistent
+with every statement here.
