@@ -40,15 +40,19 @@ class CLIPSAREncoder(nn.Module):
                 param.requires_grad = False
 
         # ── Inject LoRA adapters ───────────────────────────────────────────────
-        lora_cfg = LoraConfig(
-            r=model_cfg.lora_rank,
-            lora_alpha=model_cfg.lora_alpha,
-            lora_dropout=model_cfg.lora_dropout,
-            target_modules=model_cfg.lora_target_modules,
-            bias="none",
-        )
-        self.clip = get_peft_model(self.clip, lora_cfg)
-        self.clip.print_trainable_parameters()
+        # lora_rank=0 disables LoRA entirely (ablation: frozen CLIP, no adaptation)
+        if getattr(model_cfg, 'lora_rank', 8) > 0:
+            lora_cfg = LoraConfig(
+                r=model_cfg.lora_rank,
+                lora_alpha=model_cfg.lora_alpha,
+                lora_dropout=model_cfg.lora_dropout,
+                target_modules=model_cfg.lora_target_modules,
+                bias="none",
+            )
+            self.clip = get_peft_model(self.clip, lora_cfg)
+            self.clip.print_trainable_parameters()
+        else:
+            print("  LoRA disabled (lora_rank=0) — CLIP fully frozen, no adaptation")
 
         self.hidden_dim = model_cfg.clip_hidden_dim  # 1024 for ViT-L/14
 
