@@ -1,5 +1,32 @@
 # Paper Scope & Honest Reporting Decisions
 
+## Novel Contribution — The Actual Claim
+
+**This work is, to our knowledge, the first to demonstrate that simultaneous
+pixel-level segmentation and 6-class ice-type classification of sea ice from
+SAR satellite imagery is achievable with a single end-to-end deep learning
+pipeline.**
+
+Prior to this work, sea ice interpretation from SAR was dominated by:
+- Manual expert annotation (the norm in operational settings)
+- Semi-automated threshold / texture classifiers that do **either** rough
+  segmentation **or** coarse type labelling — not both jointly
+- No published, reproducible deep-learning baseline that handles both tasks
+  simultaneously on the same SAR image
+
+**What we prove:** With a CLIP ViT-L/14 + LoRA encoder and an image-conditioned
+U-Net decoder trained on Otsu-binarized scattering maps, a network can
+(a) produce binary ice-/water region masks (mIoU 0.351, Dice 0.442) and
+(b) assign ice types from 6 classes (weighted-F1 0.778, 5 of 6 classes ≥ F1
+0.667) on a held-out test set.  The results are modest in absolute terms — we
+make no claim of state-of-the-art performance — but they establish a concrete
+and reproducible existence proof that the task is tractable.
+
+> **This framing is the paper's core claim.**  Ablations and metric details
+> below support it honestly and do not overstate what the experiments show.
+
+---
+
 This document records *what the paper claims*, *what it reports*, and *why*,
 strictly matched to the experimental evidence. The guiding rule:
 
