@@ -332,9 +332,15 @@ def train(
                     wandb_run.log({f"val/{k}": v for k, v in val_metrics.items()
                                    if isinstance(v, (int, float))}, step=global_step)
 
-                # Track best F1 separately (for reporting only)
+                # Save best-F1 checkpoint separately (classification reporting)
                 if val_f1 > best_f1:
                     best_f1 = val_f1
+                    save_checkpoint(
+                        model, optimizer, scheduler, scaler,
+                        epoch, global_step, best_miou,
+                        output_dir / "best_model_f1.pth",
+                    )
+                    print(f"  ✓ New best F1={val_f1:.4f} (mIoU here={val_iou:.4f})")
 
                 # Best model + early stopping driven by mIoU (primary task)
                 if val_iou > best_miou:
