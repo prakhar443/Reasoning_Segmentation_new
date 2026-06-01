@@ -217,19 +217,39 @@ class SeaIceDataset(Dataset):
         self.samples: List[Dict] = []
         self._load_all_samples()
 
-        # Split deterministically
-        random.seed(self.data_cfg.seed)
-        random.shuffle(self.samples)
-        n = len(self.samples)
-        n_train = int(n * self.data_cfg.train_ratio)
-        n_val = int(n * self.data_cfg.val_ratio)
+        # ── Stratified, deterministic split ───────────────────────────────────
+        # A global shuffle-then-slice split lets a minority class (e.g. Old Ice)
+        # land almost entirely in one split, producing F1=0 on test for that
+        # class while a class with 1–2 easy test samples scores a trivial 1.0.
+        # Splitting *within each class* guarantees every class is represented in
+        # train/val/test in the same proportion, so per-class metrics are
+        # meaningful. The RNG is seeded per-class for reproducibility.
+        by_class: Dict[int, List[Dict]] = {}
+        for s in self.samples:
+            by_class.setdefault(s["label"], []).append(s)
 
-        if split == "train":
-            self.samples = self.samples[:n_train]
-        elif split == "val":
-            self.samples = self.samples[n_train: n_train + n_val]
-        else:
-            self.samples = self.samples[n_train + n_val:]
+        selected: List[Dict] = []
+        for label in sorted(by_class.keys()):
+            items = by_class[label]
+            rng = random.Random(self.data_cfg.seed + label)  # per-class, reproducible
+            rng.shuffle(items)
+            n = len(items)
+            n_train = int(round(n * self.data_cfg.train_ratio))
+            n_val = int(round(n * self.data_cfg.val_ratio))
+            # Guarantee at least one test sample per class when the class has
+            # enough items, so no class is absent from the test set.
+            if n >= 3 and n_train + n_val >= n:
+                n_val = max(0, n - n_train - 1)
+            if split == "train":
+                selected.extend(items[:n_train])
+            elif split == "val":
+                selected.extend(items[n_train: n_train + n_val])
+            else:
+                selected.extend(items[n_train + n_val:])
+
+        # Shuffle across classes so batches are class-mixed (seed = global seed)
+        random.Random(self.data_cfg.seed).shuffle(selected)
+        self.samples = selected
 
     @staticmethod
     def _mask_name_from_image(img_name: str) -> str:

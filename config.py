@@ -179,6 +179,15 @@ class TrainConfig:
     lambda_aux: float = 0.2             # ↓ from 0.4: aux was running ≥1.0 and driving overflow
     grad_clip_norm: float = 1.0         # global grad-norm clip (0.5 starved the U-Net)
 
+    # Mask-loss shape. Diagnostics showed the model over-segments (precision
+    # ≈0.42, recall ≈0.84): it floods foreground to catch every ice pixel.
+    # In Tversky = TP/(TP + α·FP + β·FN), raising α penalises false positives
+    # (over-prediction) harder than false negatives, trading excess recall for
+    # precision. α=0.6,β=0.4 is a modest nudge from balanced Dice (0.5/0.5).
+    focal_alpha: float = 0.5
+    tversky_alpha: float = 0.6          # ↑ penalise false positives (curb over-seg)
+    tversky_beta: float = 0.4
+
     # Mixed precision
     fp16: bool = True
     bf16: bool = False

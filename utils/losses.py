@@ -212,7 +212,13 @@ class SeaIceLoss(nn.Module):
         from config import cfg
         train_cfg = train_cfg or cfg.train
 
-        self.mask_loss = MaskLoss()
+        # Loss shape is config-driven so over-segmentation can be tuned without
+        # code edits: α>β in Tversky penalises false positives (curbs flooding).
+        self.mask_loss = MaskLoss(
+            focal_alpha=getattr(train_cfg, "focal_alpha", 0.5),
+            tversky_alpha=getattr(train_cfg, "tversky_alpha", 0.5),
+            tversky_beta=getattr(train_cfg, "tversky_beta", 0.5),
+        )
         self.cls_loss = WeightedClassificationLoss()
         self.attn_loss = AttentionGuidanceLoss()
 
