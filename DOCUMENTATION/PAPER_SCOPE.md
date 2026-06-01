@@ -25,9 +25,28 @@ and reproducible existence proof that the task is tractable.
 > **This framing is the paper's core claim.**  Ablations and metric details
 > below support it honestly and do not overstate what the experiments show.
 
+## Effective Pipeline (5 modules — what we actually claim)
+
+| Module | What it does | Contribution claimed? |
+|--------|-------------|----------------------|
+| SAR Preprocessing | Lee filter + dB + pseudo-RGB | Infrastructure only |
+| CLIP ViT-L/14 + LoRA | Domain-adapted visual features | **Yes — LoRA for classification** |
+| Cross-attention fusion | Fuses image tokens with text | Infrastructure |
+| U-Net decoder + Tversky loss + aux supervision | Segmentation | **Yes — Tversky + aux loss** |
+| 6-class MLP classifier | Ice type prediction | **Yes — jointly with seg.** |
+
+### Removed from claimed pipeline (tested; not contributing)
+
+| Component | Why removed |
+|-----------|------------|
+| DepthAnything V2 | Bit-identical ablation in two independent runs — zero effect |
+| Temporal consistency | No benefit found; disabled in all reported runs |
+| SAM mask decoder | Replaced by U-Net decoder in final model |
+| Free-form text generation | Model never generates language; CoT output is a template |
+
 ---
 
-This document records *what the paper claims*, *what it reports*, and *why*,
+
 strictly matched to the experimental evidence. The guiding rule:
 
 > We may choose which metrics to report, but we never make a claim that an
