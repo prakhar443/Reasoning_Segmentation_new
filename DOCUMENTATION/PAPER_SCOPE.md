@@ -110,12 +110,21 @@ full model. Where an ablated variant wins, the table shows it.
 
 - **Old Ice classification fails (F1 = 0.000).** The model *segments* Old Ice
   well (IoU 0.513, second-best of all classes) but misclassifies all 15 test
-  samples. The dataset is balanced (70 training images per class); image-level
-  statistics show Old Ice (mean brightness 141.5, std 28.5) is nearly
-  identical to Young Ice (141.5, 27.3) and First Year Ice (143.3, 28.6),
-  making it visually the hardest class to distinguish. The classifier
-  collapses all Old Ice test predictions to one of those neighbouring classes.
-  Reported openly as a visual-ambiguity failure, not a data-imbalance issue.
+  samples. The cause is a **modality limitation, not data imbalance** (the
+  dataset is balanced: 70 training images per class). Physically, Old
+  (multi-year) ice is the opposite of Young/First-Year ice — thicker, rougher,
+  with higher SAR backscatter — and is separable in calibrated or
+  multi-polarization SAR. But the dataset provides **single-channel grayscale
+  intensity JPEGs** (256×256, zero colour saturation), and on that one band the
+  discriminating radiometric signal is lost: across mean brightness, bright-tail
+  fraction (>180) and 90th-percentile intensity, Old Ice (141.5 / 11.6% / 180.5),
+  Young Ice (140.8 / 11.0% / 178.4) and First Year Ice (143.3 / 7.9% / 175.4)
+  are nearly identical, whereas Glaciers (157.7 / 24.3% / 194.7) is clearly
+  separable and scores F1 = 1.0. The classifier therefore collapses the three
+  overlapping thin/old-ice types and zeroes out Old Ice. **Future work:** add
+  calibrated dual-pol backscatter or an explicit roughness/thickness channel —
+  the feature that physically separates these classes but is absent from the
+  current single-band input.
 - **Over-segmentation tendency** (precision 0.444, recall 0.640): the model
   favors recall of ice pixels at the cost of precision. Calibrated far better
   than before (over-seg 0.94×–1.86×) but not eliminated.

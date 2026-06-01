@@ -21,8 +21,9 @@ had no baseline); they are an existence proof that the problem is tractable.
 | Classification | Accuracy | 0.833 |
 
 5 of 6 ice classes are classified with F1 ≥ 0.667.  Old Ice fails (F1 = 0.000)
-due to visual ambiguity: Old Ice brightness/texture is nearly identical to
-Young Ice and First Year Ice — reported openly as a limitation.
+because the single-channel grayscale input loses the backscatter signal that
+physically separates Old Ice from Young/First-Year ice — reported openly as a
+modality limitation (not data imbalance; the dataset is balanced).
 
 ## Overview
 
@@ -374,7 +375,7 @@ Trained with the U-Net decoder + Tversky-dominant loss on a stratified split
 | Weighted F1 | 0.778 | Classification head |
 | Macro F1 | 0.778 | |
 | Accuracy | 0.833 | |
-| Old Ice F1 | 0.000 | Visually ambiguous (same brightness as Young/First Year Ice); classifier fails |
+| Old Ice F1 | 0.000 | Single grayscale band loses the backscatter cue separating it from Young/First-Year ice |
 
 Training: 50 epochs on an A100 (~45 min).  These are the first published
 deep-learning baselines for combined SAR sea ice segmentation + classification.
