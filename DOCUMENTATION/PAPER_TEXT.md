@@ -4,6 +4,17 @@ Drop these paragraphs into your manuscript.  All numbers are genuine test-set
 results from `best_model.pth` (val mIoU = 0.4025, trained 50 epochs on A100).
 Nothing is fabricated or estimated.
 
+> **⚠️ IMPORTANT — do NOT call this work "reasoning segmentation".**
+> That term has a specific technical meaning in the literature (LISA, ReasonSeg):
+> the model reasons about an *implicit query* to decide *what* to segment, and
+> generates a language chain before producing a mask.  This pipeline does none
+> of those things — it fuses text descriptions with image features to help
+> classification, and decodes a binary ice/water mask from that fused
+> representation.  The correct framing is **"text-guided SAR sea ice
+> segmentation and classification"** or **"multimodal SAR ice-type recognition
+> and segmentation"**.  Using "reasoning segmentation" would be immediately
+> flagged by reviewers familiar with LISA/ReasonSeg.
+
 ---
 
 ## Abstract Contribution Snippet

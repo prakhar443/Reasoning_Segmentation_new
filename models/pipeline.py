@@ -1,15 +1,18 @@
 """
-models/pipeline.py — Full end-to-end sea ice reasoning segmentation pipeline.
+models/pipeline.py — Sea ice SAR segmentation & classification pipeline.
 
-Integrates all 8 modules in order:
+Published 5-module model (what the paper claims):
   1. SARPreprocessor         (data/preprocessing.py)
-  2. CLIPSAREncoder          (models/visual_encoder.py)
-  3. DepthAnyV2Encoder       (models/depth_encoder.py)
-  4. CrossAttentionReasoning (models/reasoning_module.py)
-  5. GeometricPromptGen      (models/prompt_generator.py)
-  6. SAMModule / LightweightDecoder (models/sam_module.py)
-  7. IceTypeClassifier       (models/ice_classifier.py)
-  8. TemporalConsistency     (models/temporal_consistency.py)
+  2. CLIPSAREncoder + LoRA   (models/visual_encoder.py)       ← domain adaptation
+  3. CrossAttentionFusion    (models/reasoning_module.py)     ← image↔text fusion only, no language generation
+  4. ImageUNetDecoder        (models/sam_module.py)           ← segmentation w/ Tversky + aux loss
+  5. IceTypeClassifier       (models/ice_classifier.py)       ← 6-class MLP
+
+Additional modules wired in but disabled/non-contributing in published results:
+  - DepthAnyV2Encoder       (models/depth_encoder.py)        ← evaluated, no effect, OFF
+  - GeometricPromptGen      (models/prompt_generator.py)     ← SAM prompt path (SAM not used)
+  - SAMModule               (models/sam_module.py)           ← SAM path (U-Net used instead)
+  - TemporalConsistency     (models/temporal_consistency.py) ← evaluated, no benefit, OFF
 
 Forward returns a dict with all intermediate and final outputs.
 """

@@ -2,16 +2,25 @@
 IMPLEMENTATION_SUMMARY.md — Complete overview of the Sea Ice Segmentation Pipeline implementation.
 """
 
-# 🎯 Sea Ice Reasoning Segmentation Pipeline — IMPLEMENTATION COMPLETE ✅
+# Sea Ice SAR Segmentation & Classification Pipeline
 
-## 📦 What Has Been Created
+> ⚠️ This is a historical implementation summary. For the accurate description
+> of what is claimed in the paper, see DOCUMENTATION/README.md, PAPER_SCOPE.md,
+> and CODE_MAP.md. This file uses "reasoning segmentation" / "CoT" language from
+> the original development; the published model does NOT perform reasoning
+> segmentation or chain-of-thought generation — see reasoning_module.py header.
 
-A **production-ready**, end-to-end deep learning system for sea ice SAR image analysis with:
-- **8 modular components** integrated in a single pipeline
-- **~2,700 lines** of well-documented Python code
+## What Has Been Built
+
+A research prototype demonstrating that **combined SAR sea ice segmentation and
+6-class classification is feasible** — the first such deep-learning baseline.
+The codebase contains 5 contributing modules plus several alternatives that were
+evaluated and excluded (see CODE_MAP.md).
+
+Original implementation scope (8 components, some evaluated and excluded):
+- **~2,700 lines** of Python code
 - **Full training/inference/evaluation** workflow
-- **Comprehensive configuration** system
-- **Multiple backend options** (SAM vs lightweight decoder, CLIP vs BLIP2, etc.)
+- **Multiple backend options** explored (SAM vs U-Net, CLIP vs BLIP2, depth vs no-depth)
 
 ---
 

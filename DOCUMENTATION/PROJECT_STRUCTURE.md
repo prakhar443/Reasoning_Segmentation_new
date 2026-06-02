@@ -24,18 +24,18 @@ sea_ice_seg/
 │
 ├── models/                            ← Model components & pipeline
 │   ├── __init__.py
-│   ├── visual_encoder.py              ← CLIP ViT-L/14 + LoRA
-│   ├── depth_encoder.py               ← DepthAnything V2 surface topology
-│   ├── reasoning_module.py            ← Cross-attention CoT reasoning
-│   ├── prompt_generator.py            ← Attention-guided SAM prompts
-│   ├── sam_module.py                  ← SAM mask decoder wrapper
-│   ├── ice_classifier.py              ← 6-class ice type MLP head
-│   ├── temporal_consistency.py        ← Memory bank + temporal smoothing
-│   └── pipeline.py                    ← Full 8-module end-to-end pipeline
+│   ├── visual_encoder.py              ← CLIP ViT-L/14 + LoRA [PUBLISHED — claimed]
+│   ├── depth_encoder.py               ← DepthAnything V2  [NOT PUBLISHED — evaluated, no effect]
+│   ├── reasoning_module.py            ← Image↔text cross-attention fusion [PUBLISHED — fusion only, no CoT]
+│   ├── prompt_generator.py            ← SAM prompt generator [NOT PUBLISHED — SAM path not used]
+│   ├── sam_module.py                  ← U-Net decoder (published) + SAM wrapper (not used)
+│   ├── ice_classifier.py              ← 6-class ice type MLP head [PUBLISHED — claimed]
+│   ├── temporal_consistency.py        ← Temporal module [NOT PUBLISHED — evaluated, no benefit]
+│   └── pipeline.py                    ← Full pipeline (5 published + 3 disabled modules)
 │
 ├── utils/                             ← Utilities
 │   ├── __init__.py
-│   ├── losses.py                      ← Combined loss (mask + cls + CoT)
+│   ├── losses.py                      ← Tversky + aux + cls + attention-reg losses
 │   └── metrics.py                     ← Evaluation metrics (IoU, F1, etc.)
 │
 ├── checkpoints/                       ← Model checkpoints (after download)
@@ -225,9 +225,9 @@ depth_feats = depth_enc(images, target_seq_len=256)  # (B, 256, 256)
 ```
 
 #### `models/reasoning_module.py` (≈400 lines)
-Multimodal CoT reasoning with text + image fusion:
-- **CrossAttentionReasoningModule** — Lightweight (stacked cross-attention)
-- **BLIP2ReasoningModule** — Full VLM (requires 24GB VRAM)
+Image↔text cross-attention fusion (published model uses `cross_attn_only`; no CoT, no language generation):
+- **CrossAttentionReasoningModule** — Published backend: stacked cross-attention fusion only
+- **BLIP2ReasoningModule** — Alternative VLM backend (NOT used in published results, requires 24GB VRAM)
 - Text encoder: CLIP text transformer
 - Positional encoding for patches
 - Stacked cross-attention blocks
@@ -347,7 +347,7 @@ outputs = model(images, descriptions, images_np=images_np, sequence_ids=seq_ids)
 Combined loss functions for training:
 - **MaskLoss** — BCE + Dice for segmentation
 - **WeightedClassificationLoss** — Balanced cross-entropy for 6 classes
-- **AttentionGuidanceLoss** — KL divergence for CoT attention regulation
+- **AttentionGuidanceLoss** — KL divergence regularisation on CLIP attention weights (named lambda_cot for checkpoint compatibility; not CoT supervision)
 - **SeaIceLoss** — Master loss combining all three
 
 **Key classes:**

@@ -1,16 +1,21 @@
 """
-models/reasoning_module.py — Multimodal reasoning module (CoT + cross-attention fusion).
+models/reasoning_module.py — Image↔text cross-attention fusion module.
 
-Two backends:
-  1. cross_attn_only  — Lightweight transformer cross-attention between text and image
-                        tokens. No large LLM required. Best for fine-tuning on limited GPU.
-  2. blip2            — Full BLIP-2 VLM that generates a free-form reasoning chain.
-  3. llava            — LLaVA-1.5 VLM (requires ≥24GB VRAM for 7B model).
+PUBLISHED MODEL uses the 'cross_attn_only' backend: four stacked cross-attention
+blocks that fuse CLIP visual patch tokens (queries) with CLIP text embeddings
+(keys/values). This is standard multimodal feature fusion — it does NOT perform
+chain-of-thought reasoning, does NOT generate language, and is NOT "reasoning
+segmentation" in the LISA/ReasonSeg sense. The file name is a historical artefact.
 
-The module outputs:
-  - fused_features (B, N, fusion_dim) — visual tokens attended by text
-  - cot_logits     (B, max_len, vocab) — for CoT supervision (blip2/llava only)
-  - text_embedding  (B, fusion_dim)   — sentence-level description embedding
+Three backends are implemented:
+  1. cross_attn_only  — Published model. Cross-attention fusion, no LLM, no generation.
+  2. blip2            — BLIP-2 VLM (alternative, NOT used in published results).
+  3. llava            — LLaVA-1.5 VLM (alternative, NOT used in published results).
+
+Outputs:
+  - fused_features (B, N, fusion_dim) — visual tokens enriched by text context
+  - cot_logits     (B, max_len, vocab) — language logits (blip2/llava only; None for cross_attn_only)
+  - text_embedding  (B, fusion_dim)   — sentence-level embedding
 """
 
 from __future__ import annotations

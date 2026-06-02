@@ -1,5 +1,5 @@
 """
-config.py — Central configuration for the Sea Ice Reasoning Segmentation pipeline.
+config.py — Central configuration for the Sea Ice SAR Segmentation & Classification pipeline.
 All paths, hyperparameters, and model settings live here.
 """
 
@@ -190,7 +190,7 @@ class TrainConfig:
     # that "predict all foreground" becomes a stable minimum.
     lambda_mask: float = 2.0            # Focal + Dice for segmentation mask
     lambda_cls: float = 0.5             # CrossEntropy for 6-class head
-    lambda_cot: float = 0.05            # CoT reasoning supervision (if available)
+    lambda_cot: float = 0.05            # attention-map regularisation weight (kept as lambda_cot for checkpoint compatibility)
     dice_smooth: float = 1e-4
     lambda_aux: float = 0.2             # ↓ from 0.4: aux was running ≥1.0 and driving overflow
     grad_clip_norm: float = 1.0         # global grad-norm clip (0.5 starved the U-Net)
