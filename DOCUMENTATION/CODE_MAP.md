@@ -48,6 +48,7 @@ the published configuration).
 |--------|-----|
 | Headline results (Table 1) | `sea_ice_colab_training.ipynb` Cell 19, or `python evaluate.py --checkpoint outputs/best_model.pth --split test` |
 | Ablation study (Table 2) | Notebook Ablation Cells A + B + C |
+| Baseline comparison (Table 3) | `comparison_baselines_colab.ipynb` Sections 0–8 → `outputs/comparison/*.json`; see `DOCUMENTATION/BASELINE_COMPARISON.md` |
 | All figures | Notebook Cell 19 → `outputs/figures/` |
 | Training curves | Notebook Cell 13 or Cell 19 (needs `train_history.json` from Cell 18b) |
 

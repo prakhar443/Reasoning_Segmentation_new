@@ -209,6 +209,22 @@ Bold marks true column-best (not always the full model — reported honestly).
 
 ---
 
+## Baseline comparison (Information Fusion submission)
+
+A separate study compares this model against published zero-shot, supervised,
+and reasoning-segmentation baselines (CLIPSeg, GroundingDINO+SAM, DeepLabv3+,
+LISA-7B, GeoPixel-7B, PixelLM-7B) on the **same 90 test images** with **gIoU /
+cIoU / Dice**, mirroring the *Information Fusion* underwater reasoning-seg paper.
+See **`DOCUMENTATION/BASELINE_COMPARISON.md`** for the protocol, the per-model
+environment-isolation engineering, and results. Notebook:
+`comparison_baselines_colab.ipynb`.
+
+Confirmed so far: Ours gIoU = 0.3917 (consistent with mIoU 0.351); CLIPSeg
+gIoU = 0.0839 (~4.7× below Ours). Remaining baselines populate from genuine runs
+only — no fabricated numbers.
+
+---
+
 ## References
 
 - CLIP: Radford et al., 2021 — *Learning Transferable Visual Models from Natural Language Supervision*
