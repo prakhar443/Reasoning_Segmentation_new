@@ -219,9 +219,13 @@ See **`DOCUMENTATION/BASELINE_COMPARISON.md`** for the protocol, the per-model
 environment-isolation engineering, and results. Notebook:
 `comparison_baselines_colab.ipynb`.
 
-Confirmed so far: Ours gIoU = 0.3917 (consistent with mIoU 0.351); CLIPSeg
-gIoU = 0.0839 (~4.7× below Ours). Remaining baselines populate from genuine runs
-only — no fabricated numbers.
+Confirmed results (gIoU / cIoU / Dice on 90 images): **Ours 0.3917 / 0.5105 /
+0.4853**; GroundingDINO+SAM 0.4114 / 0.4115 / 0.5107; LISA-7B 0.2549 / 0.2904 /
+0.3490; CLIPSeg 0.0839 / 0.1226 / 0.1268; GeoPixel-7B 0.0316 / 0.0350 / 0.0597.
+Our model is **#1 on cIoU** (pooled-pixel measure); Grounded-SAM edges it on
+per-image gIoU/Dice. The DeepLabv3+ run is currently **invalid** (a mask-path bug
+trained it on empty masks); PixelLM-7B is pending. No fabricated numbers — see
+`BASELINE_COMPARISON.md` for the full table and honest findings.
 
 ---
 

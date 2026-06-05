@@ -107,32 +107,60 @@ lineage already de-risked for LISA and needs no compiled extensions.
 
 ## 4. Results
 
-> Scores below come from the shared harness in §1 (gIoU / cIoU / Dice on the
-> same 90 images). **Confirmed** rows are from completed runs; **pending** rows
-> await a genuine run and are intentionally left blank.
+All scores below come from the shared harness in §1 (gIoU / cIoU / Dice on the
+same 90 images), transcribed verbatim from the per-model JSON the notebook wrote
+to `outputs/comparison/*.json`. Values are raw [0, 1] (multiply by 100 for the
+percentages used in the LaTeX table).
 
-| Method | gIoU | cIoU | Dice | Status |
-|--------|:----:|:----:|:----:|--------|
-| **Ours** (language-guided) | **0.3917** | _pending_ | _pending_ | confirmed (gIoU) |
-| CLIPSeg | 0.0839 | _pending_ | _pending_ | confirmed (gIoU) |
-| GroundingDINO + SAM | _pending_ | _pending_ | _pending_ | run completed; numbers to be transcribed |
-| DeepLabv3+ | _pending_ | _pending_ | _pending_ | run completed; numbers to be transcribed |
-| LISA-7B | _pending_ | _pending_ | _pending_ | run completed; numbers to be transcribed |
-| GeoPixel-7B | _pending_ | _pending_ | _pending_ | run in progress |
-| PixelLM-7B | _pending_ | _pending_ | _pending_ | run in progress |
+| Method | gIoU | cIoU | Dice | n | Notes |
+|--------|:----:|:----:|:----:|:-:|-------|
+| **Ours** (language-guided) | **0.3917** | **0.5105** | **0.4853** | 90 | confirmed |
+| GroundingDINO + SAM | **0.4114** | 0.4115 | **0.5107** | 90 | confirmed — see finding (a) |
+| LISA-7B | 0.2549 | 0.2904 | 0.3490 | 90 | confirmed |
+| CLIPSeg | 0.0839 | 0.1226 | 0.1268 | 90 | confirmed |
+| GeoPixel-7B | 0.0316 | 0.0350 | 0.0597 | 90 | confirmed |
+| DeepLabv3+ | 0.0008 | 0.0010 | 0.0016 | 90 | ⚠️ **invalid — training bug, see finding (b)** |
+| PixelLM-7B | _pending_ | _pending_ | _pending_ | — | not yet run (replaced SEEM) |
 
-**Confirmed observations so far:**
+### Findings (reported honestly)
 
-- Our model's harness **gIoU = 0.3917** is consistent with the headline
-  **mIoU = 0.351** reported for the published model (the small difference is the
-  test-time prompt and the gIoU averaging convention), validating that the
-  comparison harness scores our model the same way the main evaluation does.
-- **CLIPSeg gIoU = 0.0839** — a ~4.7× gap below our model, quantifying how
-  poorly a generic zero-shot text-to-mask prior transfers to SAR scattering
-  imagery and supporting the paper's in-domain-adaptation argument.
+**(a) GroundingDINO+SAM is competitive — and beats our model on two of three
+metrics.** Grounded-SAM scores higher gIoU (0.4114 vs 0.3917) and Dice (0.5107
+vs 0.4853), while **our model wins cIoU (0.5105 vs 0.4115)** by a wide margin.
+The split is informative: cIoU pools intersection/union over *all* pixels, so it
+rewards getting the large-area scenes right and is less swayed by a few small
+scenes; our model is the strongest method by that pooled measure. Grounded-SAM's
+per-image-averaged gIoU/Dice edge says SAM's boundaries are crisp **when
+GroundingDINO fires**, but it returns an empty mask whenever the detector finds
+no "sea ice" box. This is a genuine result and must be presented as such — the
+paper's contribution is not "best on every metric" but a *trained, single-pass,
+jointly-classifying* model that leads on the pooled-pixel measure and adds
+6-class ice typing that none of the baselines provide.
 
-The remaining cells will be filled **only** from the per-model JSON outputs the
-notebook writes to `outputs/comparison/*.json` on Drive.
+**(b) The DeepLabv3+ row is NOT a valid baseline and must not be reported as
+one.** Its training `Dataset` (`_SegDS`) loads masks as `masks/<image_name>.jpg`
+instead of the real `masks/<stem>_scat.jpg`, so every training mask resolved to
+an all-zero array. DeepLab therefore trained to predict empty masks and scores
+≈0. This is a **data-loader bug in the baseline harness**, not a property of
+DeepLabv3+. It needs the `_scat` mask path (and Otsu binarisation) wired into
+`_SegDS`, then a re-run, before it can stand as the supervised, no-language
+control. Until then this row is excluded from any claim.
+
+### Ranking of the valid confirmed runs (by gIoU)
+
+1. GroundingDINO+SAM — 0.4114
+2. **Ours** — 0.3917  (but **#1 on cIoU**, 0.5105)
+3. LISA-7B — 0.2549
+4. CLIPSeg — 0.0839
+5. GeoPixel-7B — 0.0316
+
+**Reading the LMM baselines:** LISA (general reasoning-seg) transfers best of the
+three 7B LMMs; **GeoPixel underperforms despite being remote-sensing-specialised**
+(0.0316) — its optical-RS pretraining does not transfer to SAR scattering maps,
+a useful point for the discussion. PixelLM is pending.
+
+> No number in this table is hand-edited. The DeepLab row is shown only so the
+> bug is on the record; it is flagged invalid rather than silently dropped.
 
 ---
 
