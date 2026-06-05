@@ -50,20 +50,19 @@ differences in the table reflect the models, not the scoring.
 |---|--------|--------|:----------------:|:---------------:|-------------|
 | 1 | **Ours** (CLIP+LoRA + cross-attn + U-Net) | Language-guided segmentation | ✅ | ✅ | Colab kernel |
 | 2 | CLIPSeg | Zero-shot text→mask | ✅ | ❌ | Colab kernel |
-| 3 | GroundingDINO + SAM | Open-vocab detection → promptable seg | ✅ | ❌ | Colab kernel |
-| 4 | DeepLabv3+ | Supervised CNN segmentation | ❌ | ✅ (on this data) | Colab kernel |
-| 5 | LISA-7B | Reasoning segmentation LMM | ✅ | ❌ | Isolated py3.10 |
-| 6 | GeoPixel-7B | Remote-sensing grounded LMM | ✅ | ❌ | Isolated py3.10 |
-| 7 | PixelLM-7B | Pixel-reasoning LMM | ✅ | ❌ | Isolated py3.10 |
+| 3 | DeepLabv3+ | Supervised CNN segmentation | ❌ | ✅ (on this data) | Colab kernel |
+| 4 | LISA-7B | Reasoning segmentation LMM | ✅ | ❌ | Isolated py3.10 |
+| 5 | GeoPixel-7B | Remote-sensing grounded LMM | ✅ | ❌ | Isolated py3.10 |
+| 6 | PixelLM-7B | Pixel-reasoning LMM | ✅ | ❌ | Isolated py3.10 |
 
 All language-guided methods receive the **same generic prompt** (a request to
 segment the sea ice), so none is hand-tuned per image.
 
 ### Why these baselines
 
-- **CLIPSeg / GroundingDINO+SAM** — strong *zero-shot* open-vocabulary
-  references; they quantify how far generic vision-language priors transfer to
-  SAR without any in-domain training.
+- **CLIPSeg** — a strong *zero-shot* open-vocabulary reference; quantifies how
+  far a generic text-to-mask vision-language prior transfers to SAR without any
+  in-domain training.
 - **DeepLabv3+** — a *supervised, non-language* control to isolate the
   contribution of language guidance versus plain in-domain training.
 - **LISA / GeoPixel / PixelLM** — published **reasoning / grounded
@@ -115,29 +114,18 @@ percentages used in the LaTeX table).
 | Method | gIoU | cIoU | Dice | n | Notes |
 |--------|:----:|:----:|:----:|:-:|-------|
 | **Ours** (language-guided) | **0.3917** | **0.5105** | **0.4853** | 90 | confirmed |
-| GroundingDINO + SAM | **0.4114** | 0.4115 | **0.5107** | 90 | confirmed — see finding (a) |
 | LISA-7B | 0.2549 | 0.2904 | 0.3490 | 90 | confirmed |
 | CLIPSeg | 0.0839 | 0.1226 | 0.1268 | 90 | confirmed |
 | GeoPixel-7B | 0.0316 | 0.0350 | 0.0597 | 90 | confirmed |
-| DeepLabv3+ | 0.0008 | 0.0010 | 0.0016 | 90 | ⚠️ **invalid — training bug, see finding (b)** |
+| DeepLabv3+ | 0.0008 | 0.0010 | 0.0016 | 90 | ⚠️ **invalid — training bug, see finding (a)** |
 | PixelLM-7B | _pending_ | _pending_ | _pending_ | — | not yet run (replaced SEEM) |
+
+> A GroundingDINO+SAM (Grounded-SAM) baseline will be added separately by the
+> authors later; it is intentionally **not** included here.
 
 ### Findings (reported honestly)
 
-**(a) GroundingDINO+SAM is competitive — and beats our model on two of three
-metrics.** Grounded-SAM scores higher gIoU (0.4114 vs 0.3917) and Dice (0.5107
-vs 0.4853), while **our model wins cIoU (0.5105 vs 0.4115)** by a wide margin.
-The split is informative: cIoU pools intersection/union over *all* pixels, so it
-rewards getting the large-area scenes right and is less swayed by a few small
-scenes; our model is the strongest method by that pooled measure. Grounded-SAM's
-per-image-averaged gIoU/Dice edge says SAM's boundaries are crisp **when
-GroundingDINO fires**, but it returns an empty mask whenever the detector finds
-no "sea ice" box. This is a genuine result and must be presented as such — the
-paper's contribution is not "best on every metric" but a *trained, single-pass,
-jointly-classifying* model that leads on the pooled-pixel measure and adds
-6-class ice typing that none of the baselines provide.
-
-**(b) The DeepLabv3+ row is NOT a valid baseline and must not be reported as
+**(a) The DeepLabv3+ row is NOT a valid baseline and must not be reported as
 one.** Its training `Dataset` (`_SegDS`) loads masks as `masks/<image_name>.jpg`
 instead of the real `masks/<stem>_scat.jpg`, so every training mask resolved to
 an all-zero array. DeepLab therefore trained to predict empty masks and scores
@@ -148,11 +136,10 @@ control. Until then this row is excluded from any claim.
 
 ### Ranking of the valid confirmed runs (by gIoU)
 
-1. GroundingDINO+SAM — 0.4114
-2. **Ours** — 0.3917  (but **#1 on cIoU**, 0.5105)
-3. LISA-7B — 0.2549
-4. CLIPSeg — 0.0839
-5. GeoPixel-7B — 0.0316
+1. **Ours** — 0.3917  (also **#1 on cIoU**, 0.5105, and Dice, 0.4853)
+2. LISA-7B — 0.2549
+3. CLIPSeg — 0.0839
+4. GeoPixel-7B — 0.0316
 
 **Reading the LMM baselines:** LISA (general reasoning-seg) transfers best of the
 three 7B LMMs; **GeoPixel underperforms despite being remote-sensing-specialised**

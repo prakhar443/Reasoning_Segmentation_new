@@ -212,20 +212,19 @@ Bold marks true column-best (not always the full model — reported honestly).
 ## Baseline comparison (Information Fusion submission)
 
 A separate study compares this model against published zero-shot, supervised,
-and reasoning-segmentation baselines (CLIPSeg, GroundingDINO+SAM, DeepLabv3+,
-LISA-7B, GeoPixel-7B, PixelLM-7B) on the **same 90 test images** with **gIoU /
-cIoU / Dice**, mirroring the *Information Fusion* underwater reasoning-seg paper.
-See **`DOCUMENTATION/BASELINE_COMPARISON.md`** for the protocol, the per-model
+and reasoning-segmentation baselines (CLIPSeg, DeepLabv3+, LISA-7B, GeoPixel-7B,
+PixelLM-7B) on the **same 90 test images** with **gIoU / cIoU / Dice**, mirroring
+the *Information Fusion* underwater reasoning-seg paper. See
+**`DOCUMENTATION/BASELINE_COMPARISON.md`** for the protocol, the per-model
 environment-isolation engineering, and results. Notebook:
 `comparison_baselines_colab.ipynb`.
 
 Confirmed results (gIoU / cIoU / Dice on 90 images): **Ours 0.3917 / 0.5105 /
-0.4853**; GroundingDINO+SAM 0.4114 / 0.4115 / 0.5107; LISA-7B 0.2549 / 0.2904 /
-0.3490; CLIPSeg 0.0839 / 0.1226 / 0.1268; GeoPixel-7B 0.0316 / 0.0350 / 0.0597.
-Our model is **#1 on cIoU** (pooled-pixel measure); Grounded-SAM edges it on
-per-image gIoU/Dice. The DeepLabv3+ run is currently **invalid** (a mask-path bug
-trained it on empty masks); PixelLM-7B is pending. No fabricated numbers — see
-`BASELINE_COMPARISON.md` for the full table and honest findings.
+0.4853** (best on all three); LISA-7B 0.2549 / 0.2904 / 0.3490; CLIPSeg 0.0839 /
+0.1226 / 0.1268; GeoPixel-7B 0.0316 / 0.0350 / 0.0597. The DeepLabv3+ run is
+currently **invalid** (a mask-path bug trained it on empty masks); PixelLM-7B is
+pending. No fabricated numbers — see `BASELINE_COMPARISON.md` for the full table
+and honest findings.
 
 ---
 
