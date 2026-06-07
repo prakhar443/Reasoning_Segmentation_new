@@ -721,7 +721,7 @@ Full Model
 w/o LoRA
   & 0.365 & 0.469 & 0.534 & F1 drops by 0.244 \\
 
-Token Decoder\dag
+Token Decoder
   & 0.344 & 0.455 & 1.000 & 15-sample experiment \\
 
 w/o Aux Loss
@@ -745,6 +745,23 @@ BCE + Dice
 \bottomrule
 \end{tabular}
 \end{table}
+
+Figure~\ref{fig:ablation} visualises the same ablation across the three metrics,
+making the trade-offs immediately apparent: the full model (highlighted) sits at
+a balanced operating point, while Tversky-Only attains the best raw segmentation
+and removing LoRA sharply degrades classification F1.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{ablation.png}
+  \caption{Ablation study across the eight model variants (mIoU, Dice, and
+           weighted F1) on the 90-image test split. The full model is retained
+           for its balanced precision--recall operating point; Tversky-Only
+           attains the best raw segmentation, and removing LoRA causes the
+           largest classification drop. Exact values are listed in
+           Table~\protect\ref{tab:ablation}.}
+  \label{fig:ablation}
+\end{figure}
 
 Several findings stand out:
 
@@ -781,7 +798,7 @@ positives (correctly detected ice), \textbf{red} pixels are false positives
 negatives (missed ice). The predicted column also carries the model's ice-type
 label, marked with a tick (correct) or cross (incorrect). Five of the six rows
 are correctly classified; the final row — an Old Ice scene — is predicted as
-Young Ice (\texttt{\texttimes}), confirming the classification failure discussed
+Young Ice ($\times$), confirming the classification failure discussed
 in Section~\ref{sec:oi_failure}.
 
 \begin{figure*}[t]
@@ -792,7 +809,7 @@ in Section~\ref{sec:oi_failure}.
            (right) predicted mask with error overlay
            (\textbf{blue}\,=\,TP, \textbf{red}\,=\,FP, \textbf{yellow}\,=\,FN).
            Each prediction column header shows the model's ice-type decision
-           (\checkmark\ correct, \texttimes\ incorrect).
+           (\checkmark\ correct, $\times$\ incorrect).
            Five classes are correctly classified; Old Ice is predicted as
            Young Ice, reflecting the single-band modality limitation
            (Section~\protect\ref{sec:oi_failure}).}
