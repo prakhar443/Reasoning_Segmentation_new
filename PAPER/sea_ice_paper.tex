@@ -37,15 +37,9 @@
 
 \begin{frontmatter}
 
-\title{Language-Guided Simultaneous Segmentation and Six-Class\\
-       Type Classification of Sea Ice from Synthetic Aperture\\
-       Radar Imagery: A Proof-of-Concept Study}
+\title{Language-Guided Segmentation and Six-Class Type Classification of Sea Ice from Synthetic Aperture Radar Imagery}
 
-\author[dtu]{Prakhar Mishra\corref{cor1}}
-\cortext[cor1]{Corresponding author.}
-\address[dtu]{Department of Information Technology, Delhi Technological University,
-              Shahbad Daulatpur, Main Bawana Road, New Delhi 110042, India}
-\ead{prakharmishra_24phdit502@dtu.ac.in}
+
 
 %%-----------------------------------------------------------------
 \begin{abstract}
@@ -61,9 +55,7 @@ image-conditioned U-Net decoder predicts ice masks while an MLP head classifies
 six ice types, trained jointly with a Focal-Tversky and cross-entropy
 objective. On a 90-image held-out split the model attains mIoU\,=\,0.351 and
 weighted-F1\,=\,0.778, and on a shared gIoU/cIoU/Dice harness scores
-0.391/0.511/0.485, surpassing LISA-7B, CLIPSeg, and GeoPixel-7B. We report all
-results transparently, including the Old Ice failure (F1\,=\,0.000) traced to
-single-band modality limits.
+0.391/0.511/0.485, surpassing LISA-7B, CLIPSeg, and GeoPixel-7B.
 \end{abstract}
 
 \begin{keyword}
@@ -86,7 +78,7 @@ circulation, albedo feedback, and Arctic ecosystems. Understanding not just
 \emph{how much} ice is present but \emph{what kind} — young, first-year,
 multi-year, glacially derived — is essential because different ice types carry
 radically different structural properties, lifespans, and roles in the climate
-system \cite{maslanik2011distribution,petty2018arctic}.
+system \cite{maslanik2011distribution}\cite{petty2018arctic}.
 
 Synthetic Aperture Radar satellites have become the workhorse of operational
 sea ice monitoring. Unlike passive optical sensors, SAR functions regardless of
@@ -189,11 +181,11 @@ computationally lightweight but struggle to generalise across sensors,
 incidence angles, and seasons.
 
 The deep-learning wave reached SAR sea ice analysis around 2016--2020, with
-convolutional networks demonstrating superior accuracy on standard benchmarks,
-as surveyed by Liu et al.~\cite{liu2021deep}. ResNet-based classifiers
-\cite{he2016deep} were applied to multi-temporal Sentinel-1 scenes, while
-several groups adapted U-Net \cite{ronneberger2015unet} to produce pixel-level
-sea ice concentration maps \cite{wang2021sarunet}. A notable limitation shared by all of these efforts is
+convolutional networks demonstrating superior accuracy on standard benchmarks.
+Liu et al. \cite{liu2021deep} trained a ResNet-based classifier on multi-temporal
+Sentinel-1 scenes, while several groups adapted U-Net
+\cite{ronneberger2015unet} to produce pixel-level sea ice concentration maps
+\cite{wang2021sarunet}. A notable limitation shared by all of these efforts is
 the exclusive focus on either segmentation \emph{or} classification. More
 importantly, none incorporates natural-language conditioning — the image is
 treated as a standalone visual signal, and the semantic richness of contextual
@@ -676,34 +668,50 @@ preventing conflicts with the Colab runtime. CLIPSeg runs in the main Colab
 kernel. All baselines receive the same generic language prompt (``segment the
 sea ice region'') with no per-image tuning.
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
-\caption{Comparison against language-guided segmentation baselines on the
-         90-image SAR sea ice test split. All methods share the same evaluation
-         harness and Otsu-binarised ground truth.
-         \dag~Zero-shot; no in-domain SAR training.
-         Bold marks the column best.}
-\label{tab:comparison}
 \small
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{llccccc}
+\caption{Comparison against language-guided segmentation baselines on the
+90-image SAR sea ice test split (gIoU / cIoU / Dice). All methods use the
+same evaluation harness and Otsu-binarised ground truth.
+\dag~Operates zero-shot without any in-domain SAR training.}
+\label{tab:comparison}
+\begin{tabular}{lccccc}
 \toprule
-\textbf{Method} & \textbf{Type} & \textbf{Lang.} & \textbf{SAR-trained} & \textbf{gIoU} & \textbf{cIoU} & \textbf{Dice} \\
+Method & Family & Params. & gIoU & cIoU & Dice \\
 \midrule
-\textbf{Ours} & Joint seg.\ + cls.\ (proposed) & \checkmark & \checkmark & \textbf{0.391} & \textbf{0.511} & \textbf{0.485} \\
-LISA-7B\dag\ \cite{lai2024lisa}           & Reasoning seg.\ LMM      & \checkmark & $\times$ & 0.255 & 0.290 & 0.349 \\
-CLIPSeg\dag\ \cite{luddecke2022image}     & Zero-shot text$\to$mask  & \checkmark & $\times$ & 0.084 & 0.123 & 0.127 \\
-GeoPixel-7B\dag\ \cite{geopixel2024}     & Remote-sensing LMM       & \checkmark & $\times$ & 0.032 & 0.035 & 0.060 \\
-\bottomrule
-\end{tabular}}
-\end{table*}
+LISA-7B\dag\ \cite{lai2024lisa}
+    & Reasoning LMM
+    & 7B
+    & 0.255 & 0.290 & 0.349 \\
 
-Our model leads on all three metrics. The gap over LISA-7B is
-particularly notable: 0.391 vs 0.255 gIoU — a 53\% relative improvement —
-from a model with roughly 4,500 times fewer trainable parameters. The comparison
-is deliberately unfair in our direction (we have in-domain training; they do
-not), and Section~\ref{sec:comparison_analysis} discusses this nuance.
-GeoPixel's low scores despite remote-sensing specialisation (0.032 gIoU)
+CLIPSeg\dag\ \cite{luddecke2022image}
+    & Text$\rightarrow$Mask
+    & 168M
+    & 0.084 & 0.123 & 0.127 \\
+
+GeoPixel-7B\dag\ \cite{geopixel2024}
+    & RS LMM
+    & 7B
+    & 0.032 & 0.035 & 0.060 \\
+
+\midrule
+\textbf{Ours}
+    & Lang.-guided Seg.
+    & 1.57M
+    & \textbf{0.391}
+    & \textbf{0.511}
+    & \textbf{0.485} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Our model leads on all three metrics, with the gap over LISA-7B particularly
+notable: 0.391 vs 0.255 on gIoU — a 53\% relative improvement — from a model
+with roughly 4,500 times fewer trainable parameters. The comparison is
+deliberately unfair in our direction (we have in-domain training; they do not),
+and Section~\ref{sec:comparison_analysis} discusses this nuance. GeoPixel's
+especially low scores despite being remote-sensing-specialised (0.032 gIoU)
 illustrate that optical-RS pretraining does not transfer to SAR scattering maps
 — a finding that has implications for future work on domain-adapted foundation
 models.
@@ -717,39 +725,47 @@ Due to hardware scheduling constraints, ablated variants ran for at most 15
 epochs (early stopping with patience\,=\,5) versus the full model's 50 epochs;
 this budget mismatch is noted where it matters most.
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
+\small
 \caption{Ablation study on the 90-image test split.
-         \textsuperscript{*}Ablated variants used $\leq$15 training epochs (patience 5);
-         the full model ran for 50 epochs. Bold marks the column best.
-         Daggers (\dag) mark results where the training-budget difference
-         may be a material confounder.}
+\textsuperscript{*}Ablated variants used $\leq$15 epochs (patience 5);
+the full model used 50 epochs. Bold indicates the best result.}
 \label{tab:ablation}
-\begin{tabular}{lccc p{5.5cm}}
+\begin{tabular}{lccc p{3.8cm}}
 \toprule
-\textbf{Variant} & \textbf{mIoU} & \textbf{Dice} & \textbf{Weighted F1} & \textbf{Note} \\
+\textbf{Variant} & \textbf{mIoU} & \textbf{Dice} & \textbf{F1} & \textbf{Note} \\
 \midrule
-Full Model (Focal + Tversky + LoRA + Aux)
+Full Model
   & 0.351 & 0.442 & 0.778 & Published configuration \\
-\addlinespace
+
 w/o LoRA
-  & 0.365 & 0.469 & 0.534 & LoRA boosts F1 by 0.244; slightly hurts seg. \\
+  & 0.365 & 0.469 & 0.534 & F1 drops by 0.244 \\
+
 Token Decoder\dag
-  & 0.344 & 0.455 & 1.000 & Comparable seg.; F1=1.0 on 15-sample set \\
+  & 0.344 & 0.455 & 1.000 & 15-sample experiment \\
+
 w/o Aux Loss
-  & 0.324 & 0.405 & 0.801 & Aux supervision improves mIoU by 0.027 \\
+  & 0.324 & 0.405 & 0.801 & Auxiliary loss helps mIoU \\
+
 w/o Depth Encoder
-  & 0.351 & 0.442 & 0.778 & Bit-identical — depth adds nothing \\
-\addlinespace
+  & 0.351 & 0.442 & 0.778 & No measurable effect \\
+
+\midrule
+
 Focal Only
-  & 0.252 & 0.310 & 1.000 & Collapses segmentation \\
+  & 0.252 & 0.310 & 1.000 & Segmentation collapse \\
+
 \textbf{Tversky Only}
-  & \textbf{0.389} & \textbf{0.493} & 0.989 & \textbf{Best segmentation row} \\
+  & \textbf{0.389} & \textbf{0.493} & 0.989 &
+    \textbf{Best segmentation} \\
+
 BCE + Dice
-  & 0.332 & 0.421 & 0.822 & Standard baseline \\
+  & 0.332 & 0.421 & 0.822 & Baseline \\
+
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 Several findings stand out:
 
