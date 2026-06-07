@@ -41,7 +41,8 @@
 %%  PAPER METADATA
 %%================================================================
 
-\Title{Towards Reasoning-Aware Sea-Ice Understanding: Joint Segmentation and Ice-Type Classification from SAR Imagery}
+\Title{Reasoning-Aware Sea-Ice Understanding: Joint Segmentation and
+Six-Class Ice-Type Classification from Synthetic Aperture Radar Imagery}
 
 %% Replace with actual author names and affiliations before submission
 \Author{Author One\textsuperscript{1,*} and Author Two\textsuperscript{1}}
@@ -75,7 +76,7 @@ shared gIoU/cIoU/Dice harness scores 0.391/0.511/0.485, surpassing LISA-7B,
 CLIPSeg, and GeoPixel-7B under zero-shot conditions.}
 
 %%  MDPI keywords: semicolons, no \sep
-\keyword{SAR sea ice segmentation; language-guided segmentation; CLIP; LoRA;
+\keyword{SAR sea ice segmentation; reasoning-aware segmentation; CLIP; LoRA;
 cross-attention fusion; multimodal learning; remote sensing; cryosphere}
 
 %%================================================================
@@ -120,14 +121,14 @@ natural-language context as a conditioning signal; and, to the best of our
 knowledge, none establishes a public, reproducible combined baseline that a
 subsequent study can build on.
 
-Concurrently, the emergence of vision-language models (VLMs) has transformed
+Concurrently, the emergence of multimodal foundation models (VLMs) has transformed
 image understanding more broadly. CLIP \cite{radford2021learning} demonstrated
 that aligning visual and textual representations through contrastive
 pretraining unlocks powerful zero-shot and few-shot capabilities. CLIPSeg
 \cite{luddecke2022image} extended this to open-vocabulary segmentation without
 any pixel-level supervision at train time. Most recently, reasoning-segmentation
 systems such as LISA \cite{lai2024lisa}, GLaMM \cite{rasheed2024glamm}, and
-PixelLM \cite{ren2024pixellm} have demonstrated the value of language-guided
+PixelLM \cite{ren2024pixellm} have demonstrated the value of reasoning-informed
 visual understanding for complex segmentation tasks, coupling LLM decoders with
 pixel-level output heads to enable instruction-following mask prediction. However, their applicability to
 SAR-based cryospheric monitoring remains largely unexplored, as these models
@@ -212,7 +213,7 @@ treated as a standalone visual signal, and the semantic richness of contextual
 descriptions (acquisition time, region, expected ice type from prior knowledge)
 is discarded.
 
-\subsection{Vision-Language Models for Segmentation}
+\subsection{Multimodal Foundation Models for Segmentation}
 
 The introduction of CLIP \cite{radford2021learning} marked a turning point. By
 pre-training a ViT-L/14 image encoder \cite{dosovitskiy2021image} and a text
@@ -233,7 +234,7 @@ to produce open-vocabulary instance masks. Although powerful in natural-image
 settings, such pipelines lack the fine-grained ice-type discrimination that our
 task requires.
 
-\subsection{Language-Guided and Reasoning Segmentation Models}
+\subsection{Reasoning Segmentation and Multimodal Grounding Models}
 
 Recent reasoning-segmentation systems couple an LLM decoder with a pixel-level
 output head to enable instruction-following mask generation. LISA
@@ -257,7 +258,7 @@ codebook that translates pixel-level token predictions into masks, requiring no
 external mask decoder at inference. This makes PixelLM a natural comparison for
 future work on this dataset.
 
-While these systems demonstrate the value of language-guided visual understanding
+While these systems demonstrate the value of reasoning-informed multimodal understanding
 in general-domain and optical remote-sensing settings, their applicability to
 SAR-based cryospheric monitoring remains largely unexplored. The SAR modality
 introduces a fundamental domain gap: backscatter intensities bear no direct
@@ -363,7 +364,7 @@ and classification heads.
 \subsection{Overview}
 
 Figure~\ref{fig:architecture} illustrates the complete pipeline, which comprises
-five sequential modules: (1) SAR preprocessing, (2) language-conditioned visual
+five sequential modules: (1) SAR preprocessing, (2) reasoning-aware visual
 encoding, (3) cross-attention text--visual fusion, (4) U-Net segmentation
 decoding, and (5) ice-type classification. Formally, given a SAR image
 $I \in \mathbb{R}^{H \times W}$ and an associated text description
@@ -424,7 +425,7 @@ the preprocessing step.
   \label{fig:preprocessing}
 \end{figure}
 
-\subsection{Language-Conditioned Visual Encoder}
+\subsection{Reasoning-Aware Visual Encoder}
 \label{sec:encoder}
 
 We use the CLIP ViT-L/14 vision transformer as our visual backbone. The image
@@ -668,7 +669,7 @@ Table~\ref{tab:main_results} reports the test-set metrics for our model on the
 complete failure (F1\,=\,0.000); the cause is analysed in
 Section~\ref{sec:oi_failure}.
 
-\subsection{Comparison with Language-Guided Baselines}
+\subsection{Comparison with Reasoning-Segmentation Baselines}
 
 Table~\ref{tab:comparison} compares our model against three published methods
 under the shared evaluation harness. LISA-7B and GeoPixel-7B each run in an
@@ -680,7 +681,7 @@ sea ice region'') with no per-image tuning.
 \begin{table}[H]
 \centering
 \small
-\caption{Comparison against language-guided segmentation baselines on the
+\caption{Comparison against reasoning-segmentation baselines on the
 90-image SAR sea ice test split (gIoU / cIoU / Dice). All methods use the
 same evaluation harness and Otsu-binarised ground truth.
 $^\dag$~Operates zero-shot without any in-domain SAR training.}
@@ -706,7 +707,7 @@ GeoPixel-7B$^\dag$ \cite{geopixel2024}
 
 \midrule
 \textbf{Ours}
-    & Lang.-guided Seg.
+    & Reasoning-Aware SAR
     & 1.57M
     & \textbf{0.391}
     & \textbf{0.511}
@@ -923,7 +924,7 @@ discriminative signal. The fix is clear: calibrated dual-polarisation SAR
 anisotropy, alpha angle) would restore the physical separability that
 single-band data discards.
 
-\subsection{Comparison with Language-Guided Baselines}
+\subsection{Comparison with Reasoning-Segmentation Baselines}
 \label{sec:comparison_analysis}
 
 The 53\% relative gIoU advantage of our model over LISA-7B (0.391 vs 0.255)
