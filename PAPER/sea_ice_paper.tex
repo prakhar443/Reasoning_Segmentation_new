@@ -156,9 +156,7 @@ for both the segmentation decoder and the classifier.
 
   \item We introduce a \textbf{reasoning-informed multimodal fusion strategy}
         that combines SAR observations with domain-specific textual
-        descriptions via cross-attention, and demonstrate that this language
-        conditioning is critical for classification performance — evidenced
-        by a 0.244-point weighted-F1 gain from LoRA adaptation in ablation.
+        descriptions through cross-attention.
 
   \item We provide a \textbf{detailed analysis of modality limitations,
         segmentation behaviour, and class-specific failure modes}, including
@@ -948,6 +946,16 @@ reinforces the positioning articulated in Section~\ref{sec:intro}: reasoning-
 segmentation systems, however capable in their training domain, require
 explicit domain adaptation before they can serve as reliable tools for
 SAR-based cryospheric monitoring.
+
+We therefore wish to be explicit about how these comparisons should be read.
+The primary contribution of this work is not demonstrating superiority over
+general-purpose reasoning-segmentation models, but establishing a task-specific
+baseline and highlighting the substantial domain gap between optical foundation
+models and SAR imagery. The numbers in Table~\ref{tab:comparison} should be
+interpreted as a measurement of that gap under a common evaluation protocol,
+not as a claim that a compact in-domain model is intrinsically better than a
+large multimodal one. We expect that domain-adapted large models, given
+SAR-specific pretraining, would close and likely exceed this margin.
 
 \subsection{Segmentation Precision--Recall Trade-off}
 
