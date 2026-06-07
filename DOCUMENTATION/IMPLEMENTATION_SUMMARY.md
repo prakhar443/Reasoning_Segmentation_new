@@ -13,7 +13,8 @@ IMPLEMENTATION_SUMMARY.md — Complete overview of the Sea Ice Segmentation Pipe
 ## What Has Been Built
 
 A research prototype demonstrating that **combined SAR sea ice segmentation and
-6-class classification is feasible** — the first such deep-learning baseline.
+6-class classification is feasible** — to the best of our knowledge, the first
+reported such deep-learning baseline.
 The codebase contains 5 contributing modules plus several alternatives that were
 evaluated and excluded (see CODE_MAP.md).
 

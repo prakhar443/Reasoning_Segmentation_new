@@ -1,8 +1,9 @@
 # Sea Ice SAR Segmentation & Classification — First Proof of Concept
 
-**The first end-to-end deep-learning pipeline for simultaneous pixel-level
-segmentation and 6-class ice-type classification from SAR sea ice satellite
-imagery.**  No prior deep-learning baseline existed for this combined task.
+**To the best of our knowledge, the first reported deep-learning framework for
+simultaneous pixel-level segmentation and 6-class ice-type classification from
+SAR sea ice satellite imagery.**  We are not aware of a prior deep-learning
+baseline for this combined task.
 The goal is not to claim state-of-the-art metrics but to demonstrate the task
 is tractable and establish reproducible baselines for future work.
 

@@ -19,14 +19,14 @@ Nothing is fabricated or estimated.
 
 ## Abstract Contribution Snippet
 
-> We present, to our knowledge, the first end-to-end deep-learning pipeline for
-> the combined task of pixel-level segmentation and 6-class ice-type
-> classification from single-band SAR satellite imagery of sea ice.  Prior work
-> addressed each task in isolation using manual annotation or semi-automated
-> threshold-based methods; no reproducible deep-learning baseline existed for
-> this joint formulation.  Our pipeline achieves a mean IoU of 0.351 and a
+> We present, to the best of our knowledge, the first reported deep-learning
+> framework for the combined task of pixel-level segmentation and 6-class
+> ice-type classification from single-band SAR satellite imagery of sea ice.
+> Prior work addressed each task in isolation using manual annotation or
+> semi-automated threshold-based methods; we are not aware of a reproducible
+> deep-learning baseline for this joint formulation.  Our pipeline achieves a mean IoU of 0.351 and a
 > weighted F1 of 0.778 on a stratified held-out test set, successfully
-> classifying five of six ice types, and provides the first quantitative
+> classifying five of six ice types, and provides quantitative
 > baselines for future work in automated sea ice monitoring from satellite SAR.
 
 ---
@@ -106,8 +106,8 @@ prefers to label ambiguous pixels as ice rather than water.  Per-class IoU
 ranges from 0.147 (Icebergs) to 0.558 (Glaciers), with Old Ice reaching 0.513
 despite a classification F1 of zero (discussed in Section 4.3).
 
-To our knowledge these are the first reported deep-learning segmentation
-numbers for this task on SAR sea ice data.
+To the best of our knowledge these are the first reported deep-learning
+segmentation numbers for this task on SAR sea ice data.
 
 ### 4.2 Classification Performance
 

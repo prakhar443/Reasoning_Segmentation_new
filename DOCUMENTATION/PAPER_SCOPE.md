@@ -2,7 +2,7 @@
 
 ## Novel Contribution — The Actual Claim
 
-**This work is, to our knowledge, the first to demonstrate that simultaneous
+**This work is, to the best of our knowledge, the first to demonstrate that simultaneous
 pixel-level segmentation and 6-class ice-type classification of sea ice from
 SAR satellite imagery is achievable with a single end-to-end deep learning
 pipeline.**
