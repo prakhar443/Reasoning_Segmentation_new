@@ -314,24 +314,16 @@ descriptions are encoded by CLIP's text transformer and fused with the visual
 representation, providing the language signal that conditions our segmentation
 and classification heads.
 
-\begin{figure}[H]
+\begin{figure*}[t]
   \centering
-  \fbox{\parbox{0.9\linewidth}{\centering
-    \vspace{3cm}
-    \textbf{[FIGURE PLACEHOLDER — fig:dataset\_samples]}\\[4pt]
-    Six representative SAR patches (one per ice class).
-    Arrange as a $2 \times 3$ grid. Each panel: raw SAR image (top),
-    Otsu-binarised scattering mask (bottom), class name as subtitle.
-    Greyscale colourmaps; no artificial colour added.
-    \vspace{3cm}
-  }}
+  \includegraphics[width=\textwidth]{figures/dataset_samples.png}
   \caption{Representative SAR images and corresponding binary ground-truth masks
            for all six ice categories. Note the near-identical visual appearance
            of Young Ice, First Year Ice, and Old Ice in single-band intensity,
            which motivates the modality limitation analysis in
            Section~\protect\ref{sec:oi_failure}.}
   \label{fig:dataset_samples}
-\end{figure}
+\end{figure*}
 
 %%====================================================================
 \section{Methodology}
@@ -349,22 +341,16 @@ $\mathcal{T}$, the model outputs a binary mask
 $\hat{M} \in \{0,1\}^{H \times W}$ and a class label
 $\hat{y} \in \{0,\ldots,5\}$.
 
-\begin{figure}[H]
+\begin{figure*}[t]
   \centering
-  \fbox{\parbox{0.9\linewidth}{\centering
-    \vspace{4cm}
-    \textbf{[FIGURE PLACEHOLDER — fig:architecture]}\\[4pt]
-    Full pipeline architecture diagram — see \texttt{figure\_prompts.txt}
-    for the detailed Gemini AI generation prompt.
-    \vspace{4cm}
-  }}
+  \includegraphics[width=\textwidth]{figures/architecture.png}
   \caption{End-to-end architecture. Modules (1)--(5) are described in
            Sections~\protect\ref{sec:preproc}--\protect\ref{sec:loss}.
            Dashed arrows indicate frozen weights; solid arrows indicate
            trained connections. $\oplus$ denotes concatenation,
            $\otimes$ denotes masked pooling.}
   \label{fig:architecture}
-\end{figure}
+\end{figure*}
 
 \subsection{SAR Preprocessing}
 \label{sec:preproc}
@@ -397,16 +383,9 @@ the input contract of CLIP ViT-L/14 trained on natural RGB images. Channel-wise
 mean and standard deviation normalisation using ImageNet statistics completes
 the preprocessing step.
 
-\begin{figure}[H]
+\begin{figure}[t]
   \centering
-  \fbox{\parbox{0.9\linewidth}{\centering
-    \vspace{2.5cm}
-    \textbf{[FIGURE PLACEHOLDER — fig:preprocessing]}\\[4pt]
-    Three-panel horizontal strip: (a) raw SAR JPEG, (b) Lee-filtered
-    result, (c) dB-scaled pseudo-RGB tensor.
-    Show intensity histograms below each panel.
-    \vspace{2.5cm}
-  }}
+  \includegraphics[width=\linewidth]{figures/preprocessing.png}
   \caption{SAR preprocessing stages. (a) Raw backscatter amplitude.
            (b) After Lee speckle filtering ($7 \times 7$ window).
            (c) dB-converted pseudo-RGB normalised for CLIP input.
@@ -781,18 +760,9 @@ Several findings stand out:
 
 \subsection{Per-Class Performance}
 
-\begin{figure}[H]
+\begin{figure}[t]
   \centering
-  \fbox{\parbox{0.9\linewidth}{\centering
-    \vspace{3cm}
-    \textbf{[FIGURE PLACEHOLDER — fig:per\_class\_f1]}\\[4pt]
-    Horizontal bar chart. Six bars, one per class. X-axis: F1 score 0 to 1.
-    Colour-code: green for F1=1.0, orange for 0.5–1.0, red for F1=0.
-    Order (top to bottom): Glaciers (1.0), Icebergs (1.0), Young Ice (1.0),
-    Floating Ice (1.0), First Year Ice (0.667), Old Ice (0.0).
-    Annotate each bar with its numeric F1 value.
-    \vspace{3cm}
-  }}
+  \includegraphics[width=\linewidth]{figures/per_class_f1.png}
   \caption{Per-class F1 scores on the 90-image test split. Five of six classes
            reach F1\,$\geq$\,0.667; Glaciers, Icebergs, Young Ice, and Floating
            Ice achieve perfect F1\,=\,1.0. Old Ice is the sole failure (F1\,=\,0.000),
@@ -853,17 +823,9 @@ immediately visible.
   \label{fig:seg_overview}
 \end{figure*}
 
-\begin{figure}[H]
+\begin{figure}[t]
   \centering
-  \fbox{\parbox{0.9\linewidth}{\centering
-    \vspace{3cm}
-    \textbf{[FIGURE PLACEHOLDER — fig:confusion]}\\[4pt]
-    $6\times6$ normalised confusion matrix heatmap.
-    Classes (row = true, col = predicted):
-    Young Ice, First Year Ice, Floating Ice, Glaciers, Icebergs, Old Ice.
-    Colour: dark blue = high, white = low. Annotate each cell with fraction.
-    \vspace{3cm}
-  }}
+  \includegraphics[width=\linewidth]{figures/confusion_matrix.png}
   \caption{Normalised confusion matrix for six-class ice classification on the
            90-image test split. Diagonal entries confirm high accuracy for five
            classes. Old Ice is uniformly misclassified as First Year Ice,
@@ -945,17 +907,9 @@ navigation planning than marginal over-detection. This trade-off can be tuned
 at inference via the binarisation threshold; Figure~\ref{fig:threshold}
 illustrates sensitivity across the range $[0.2, 0.8]$.
 
-\begin{figure}[H]
+\begin{figure}[t]
   \centering
-  \fbox{\parbox{0.9\linewidth}{\centering
-    \vspace{2.5cm}
-    \textbf{[FIGURE PLACEHOLDER — fig:threshold]}\\[4pt]
-    Dual-axis line chart. X-axis: threshold 0.2 to 0.8.
-    Left Y-axis (solid lines): mIoU and Dice (0 to 0.6).
-    Right Y-axis (dashed lines): Precision and Recall (0 to 1.0).
-    Mark the operating threshold (0.5) with a vertical dashed line.
-    \vspace{2.5cm}
-  }}
+  \includegraphics[width=\linewidth]{figures/threshold_sensitivity.png}
   \caption{Threshold sensitivity on the 90-image test split. mIoU and Dice
            peak near 0.4, while the Precision--Recall crossover occurs around
            0.55. The default threshold of 0.5 provides a balanced operating
