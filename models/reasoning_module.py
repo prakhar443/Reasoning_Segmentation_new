@@ -174,18 +174,12 @@ class CrossAttentionReasoningModule(nn.Module):
         patch_tokens: torch.Tensor,          # (B, N, clip_dim)
         depth_tokens: torch.Tensor,          # (B, N, depth_dim)
         descriptions: List[str],             # length B
-        ablate_text: bool = False,           # zero the text signal (image-only ablation)
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Returns:
             fused    (B, N, fusion_dim) — image tokens enriched by text
             attn_map (B, N)            — mean cross-attention over last CA block
             sent_emb (B, fusion_dim)   — sentence embedding for classification head
-
-        ablate_text=True zeros the projected text tokens (cross-attention K/V) and
-        the sentence embedding, so the fused representation and classifier receive
-        no textual information. Used for the image-only modality ablation; the
-        architecture and parameter count are unchanged.
         """
         B = patch_tokens.shape[0]
 
@@ -198,11 +192,6 @@ class CrossAttentionReasoningModule(nn.Module):
         txt_tok, sent_emb = self.text_encoder(descriptions)     # (B,L,text_dim), (B,text_dim)
         txt_tok = self.text_proj(txt_tok)                        # (B, L, fusion_dim)
         sent_emb = self.sent_proj(sent_emb)                     # (B, fusion_dim)
-
-        # ── Modality ablation: zero the text signal ───────────────────────────
-        if ablate_text:
-            txt_tok = torch.zeros_like(txt_tok)
-            sent_emb = torch.zeros_like(sent_emb)
 
         # ── Stacked cross-attention ───────────────────────────────────────────
         x = img
@@ -269,19 +258,13 @@ class BLIP2ReasoningModule(nn.Module):
         self,
         pixel_values: torch.Tensor,
         descriptions: List[str],
-        ablate_text: bool = False,
     ) -> Tuple[torch.Tensor, None, torch.Tensor]:
         """
         Returns:
             fused    (B, 32, fusion_dim)  — Q-Former query features
             None                          — no per-patch attn in BLIP-2 path
             sent_emb (B, fusion_dim)      — mean Q-Former output
-
-        ablate_text is accepted for API parity with the published cross-attention
-        backend; the BLIP-2 path is not used in the reported results.
         """
-        if ablate_text:
-            descriptions = ["" for _ in descriptions]
         device = pixel_values.device
         inputs = self.processor(
             images=pixel_values,

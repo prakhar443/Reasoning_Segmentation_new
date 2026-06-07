@@ -808,52 +808,6 @@ Several findings stand out:
   \item \textbf{Depth encoder contributes nothing.} Bit-identical metrics confirm that the DepthAnything V2 depth channel (explored as an auxiliary depth cue) provides no additional discriminative information, consistent with the expectation that single-channel SAR images carry no photometric depth signal.
 \end{itemize}
 
-\subsection{Modality Ablation}
-\label{sec:modality_ablation}
-
-To isolate the contribution of each input modality, we perform an inference-time
-modality ablation on the \emph{same} trained model (no retraining). In the
-\emph{Image-Only} variant the textual signal is removed by zeroing the projected
-text tokens (the cross-attention keys/values) and the sentence embedding, so the
-prediction is driven by the SAR image alone. In the \emph{Text-Only} variant the
-visual signal is removed by zeroing the visual patch tokens and the image fed to
-the segmentation decoder, leaving only the textual description. This experiment
-measures how strongly each output depends on each modality for the trained model
-and should be read as a modality-reliance analysis rather than a comparison of
-independently retrained models.
-
-%% NOTE: Run `python ablation_modality.py --checkpoint outputs/best_model.pth`
-%% (or notebook section 18c) and paste the resulting mIoU / Dice / Weighted-F1
-%% values for the Image-Only and Text-Only rows below. The Full row reproduces
-%% the published configuration (Table~\ref{tab:main_results}).
-\begin{table}[H]
-\centering
-\small
-\caption{Inference-time modality ablation on the 90-image test split. The same
-trained model is evaluated with each input modality zeroed at inference (no
-retraining), quantifying how much each output relies on the SAR image versus the
-textual description. Best value in each column is in bold.}
-\label{tab:modality_ablation}
-\begin{tabular}{lccc}
-\toprule
-\textbf{Variant} & \textbf{mIoU} & \textbf{Dice} & \textbf{Weighted F1} \\
-\midrule
-Full (Image+Text) & 0.351 & 0.442 & 0.778 \\
-Image Only        & ---   & ---   & ---   \\
-Text Only         & ---   & ---   & ---   \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The full image\,+\,text model is the reference operating point. Removing the
-textual signal (\emph{Image-Only}) isolates the segmentation and classification
-performance attainable from SAR alone, while removing the visual signal
-(\emph{Text-Only}) reveals how little spatial information the description carries
-on its own---segmentation in particular is expected to degrade sharply, since the
-decoder is conditioned on the SAR image. The gap between the full model and the
-Image-Only variant on Weighted F1 quantifies the classification benefit of the
-reasoning-oriented textual descriptions in the multimodal fusion.
-
 \subsection{Per-Class Performance}
 
 \begin{figure}[H]

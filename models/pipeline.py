@@ -129,8 +129,6 @@ class SeaIceSegmentationPipeline(nn.Module):
         frame_ids: Optional[List[int]] = None,
         use_long_desc: bool = True,        # toggle short/long at inference
         return_aux: bool = False,          # return aux logits for deep supervision
-        ablate_text: bool = False,         # image-only ablation: zero the text signal
-        ablate_image: bool = False,        # text-only ablation: zero the image signal
     ) -> Dict:
         """
         Full pipeline forward pass.
@@ -160,25 +158,13 @@ class SeaIceSegmentationPipeline(nn.Module):
         # attn_weights: (B, N)
         N = patch_tokens.shape[1]
 
-        # ── Modality ablation: zero the image signal (text-only variant) ───────
-        # Zero the visual patch tokens and the image fed to the U-Net decoder so
-        # that segmentation and the fused representation receive no visual
-        # information; the trained weights are unchanged (inference-time ablation).
-        if ablate_image:
-            patch_tokens = torch.zeros_like(patch_tokens)
-            dec_images = torch.zeros_like(images)
-        else:
-            dec_images = images
-
         # ── Step 3: Depth encoding ────────────────────────────────────────────
         depth_tokens = self.depth_encoder(images, target_seq_len=N)
         # depth_tokens: (B, N, depth_dim)
-        if ablate_image:
-            depth_tokens = torch.zeros_like(depth_tokens)
 
         # ── Step 4: Reasoning + fusion ────────────────────────────────────────
         fused_tokens, reasoning_attn, sent_emb = self.reasoning_module(
-            patch_tokens, depth_tokens, descriptions, ablate_text=ablate_text
+            patch_tokens, depth_tokens, descriptions
         )
         # fused_tokens: (B, N, fusion_dim)
         # reasoning_attn: (B, N)
@@ -219,10 +205,10 @@ class SeaIceSegmentationPipeline(nn.Module):
             # During training return the /4-scale aux head for deep supervision.
             if return_aux:
                 mask_logits, aux_logits = self.mask_decoder(
-                    dec_images, patch_tokens, return_aux=True
+                    images, patch_tokens, return_aux=True
                 )
             else:
-                mask_logits = self.mask_decoder(dec_images, patch_tokens)
+                mask_logits = self.mask_decoder(images, patch_tokens)
             masks_hw = torch.sigmoid(mask_logits)
         else:
             # Token decoder path (returns logits).
