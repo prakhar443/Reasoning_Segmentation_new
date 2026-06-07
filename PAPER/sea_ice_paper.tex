@@ -787,48 +787,55 @@ Several findings stand out:
 
 \subsection{Qualitative Segmentation Results}
 
-\begin{figure}[H]
+Figure~\ref{fig:qualitative} shows one representative prediction per ice class.
+Each row presents the SAR input, the Otsu-binarised ground-truth mask, and the
+predicted mask rendered as a three-colour overlay: \textbf{blue} pixels are true
+positives (correctly detected ice), \textbf{red} pixels are false positives
+(predicted ice where there is none), and \textbf{yellow} pixels are false
+negatives (missed ice). The predicted column also carries the model's ice-type
+label, marked with a tick (correct) or cross (incorrect). Five of the six rows
+are correctly classified; the final row — an Old Ice scene — is predicted as
+Young Ice (\texttt{\texttimes}), confirming the classification failure discussed
+in Section~\ref{sec:oi_failure}.
+
+\begin{figure*}[t]
   \centering
-  \fbox{\parbox{0.9\linewidth}{\centering
-    \vspace{4cm}
-    \textbf{[FIGURE PLACEHOLDER — fig:qualitative]}\\[4pt]
-    $6 \times 3$ grid. Rows = one sample per ice class (order as above).
-    Columns: (1) Raw SAR input, (2) Ground truth binary mask,
-    (3) Predicted binary mask with overlay (green = TP, red = FP, blue = FN).
-    Add per-row class label and IoU value.
-    \vspace{4cm}
-  }}
+  \includegraphics[width=\textwidth]{figures/sample_predictions.png}
   \caption{Qualitative segmentation results — one sample per ice class.
            Columns: (left) SAR input, (centre) Otsu ground-truth mask,
            (right) predicted mask with error overlay
-           (\textcolor{green}{green} = TP, \textcolor{red}{red} = FP,
-           \textcolor{blue}{blue} = FN).
-           The model captures broad ice extent but misses fine boundaries
-           (Boundary IoU $\approx$ 0.014), consistent with the coarse
-           Otsu supervision signal.}
+           (\textbf{blue}\,=\,TP, \textbf{red}\,=\,FP, \textbf{yellow}\,=\,FN).
+           Each prediction column header shows the model's ice-type decision
+           (\checkmark\ correct, \texttimes\ incorrect).
+           Five classes are correctly classified; Old Ice is predicted as
+           Young Ice, reflecting the single-band modality limitation
+           (Section~\protect\ref{sec:oi_failure}).}
   \label{fig:qualitative}
-\end{figure}
+\end{figure*}
 
-\subsection{Training Dynamics}
+\subsection{Segmentation Performance Overview}
 
-\begin{figure}[H]
+Figure~\ref{fig:seg_overview} summarises the test-set segmentation results from
+two complementary perspectives. The left panel shows the four aggregate metrics
+(mIoU\,=\,0.351, cIoU\,=\,0.456, Dice\,=\,0.442, Pixel Accuracy\,=\,0.656).
+The right panel breaks segmentation quality down by ice class. Glaciers achieves
+the highest per-class IoU (0.558), benefiting from its high backscatter contrast;
+Floating Ice (0.481) and Old Ice (0.513) also exceed the mean. Young Ice (0.152)
+and Icebergs (0.147) are the weakest, both well below the overall mIoU. The dashed
+red reference line marks the overall mean IoU so per-class deviations are
+immediately visible.
+
+\begin{figure*}[t]
   \centering
-  \fbox{\parbox{0.9\linewidth}{\centering
-    \vspace{3cm}
-    \textbf{[FIGURE PLACEHOLDER — fig:training\_curves]}\\[4pt]
-    Three vertically stacked subplots sharing x-axis (epoch 0–50):
-    (top) total loss: train and val; (middle) mIoU: train and val;
-    (bottom) weighted F1: train and val.
-    Highlight epoch of best val mIoU with a vertical dashed line.
-    Legend inside each subplot.
-    \vspace{3cm}
-  }}
-  \caption{Training dynamics over 50 epochs. Train and validation mIoU
-           converge to similar values throughout training, indicating that
-           the performance ceiling is a property of the supervision signal
-           (Otsu-binarised scattering maps) rather than of overfitting.}
-  \label{fig:training_curves}
-\end{figure}
+  \includegraphics[width=\textwidth]{figures/segmentation_overview.png}
+  \caption{Test-set segmentation performance. \emph{Left}: four aggregate metrics
+           (mIoU, cIoU, Dice, Pixel Accuracy). \emph{Right}: per-class
+           segmentation IoU for all six ice categories; the dashed red line marks
+           the overall mIoU (0.351). Glaciers (0.558) and Old Ice (0.513) exceed
+           the mean; Young Ice (0.152) and Icebergs (0.147) are the weakest
+           segmentation classes.}
+  \label{fig:seg_overview}
+\end{figure*}
 
 \begin{figure}[H]
   \centering
@@ -942,9 +949,10 @@ illustrates sensitivity across the range $[0.2, 0.8]$.
 
 \subsection{Single-Band Performance Ceiling}
 
-A striking property of the training dynamics (Figure~\ref{fig:training_curves})
-is that train mIoU and validation mIoU remain nearly identical throughout all
-50 epochs. This absence of a train--val gap means the model is not overfitting;
+A striking property of the learning process is that train mIoU and validation
+mIoU remain nearly identical throughout all 50 epochs — an observation logged
+in the training history but not reproduced as a separate figure here.
+This absence of a train--val gap means the model is not overfitting;
 rather, it is limited by the quality of the supervision signal. Ground-truth
 masks are Otsu-binarised scattering maps — a coarse, image-relative threshold
 applied to the same single-band intensity that the model receives as input.
