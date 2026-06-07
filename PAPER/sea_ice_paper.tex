@@ -19,6 +19,7 @@
 \usepackage{makecell}
 \usepackage{caption}
 \usepackage{enumitem}
+\usepackage{rotating}
 
 \journal{Information Fusion}
 
@@ -801,9 +802,9 @@ are correctly classified; the final row — an Old Ice scene — is predicted as
 Young Ice ($\times$), confirming the classification failure discussed
 in Section~\ref{sec:oi_failure}.
 
-\begin{figure*}[t]
+\begin{sidewaysfigure}
   \centering
-  \includegraphics[width=\textwidth]{sample_predictions.png}
+  \includegraphics[width=\textheight]{sample_predictions.png}
   \caption{Qualitative segmentation results — one sample per ice class.
            Columns: (left) SAR input, (centre) Otsu ground-truth mask,
            (right) predicted mask with error overlay
@@ -814,7 +815,7 @@ in Section~\ref{sec:oi_failure}.
            Young Ice, reflecting the single-band modality limitation
            (Section~\protect\ref{sec:oi_failure}).}
   \label{fig:qualitative}
-\end{figure*}
+\end{sidewaysfigure}
 
 \subsection{Segmentation Performance Overview}
 
@@ -1010,6 +1011,7 @@ making reproducible research on limited hardware accessible. Compute was
 provided by Google Colab's A100 GPU allocation.
 
 %%====================================================================
+\clearpage
 \bibliography{references}
 %%====================================================================
 
