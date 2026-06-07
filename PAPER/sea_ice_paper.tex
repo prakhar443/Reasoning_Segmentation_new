@@ -5,7 +5,8 @@
 %%   https://www.mdpi.com/authors/research-articles/mdpi-article-template
 %% Place Definitions/mdpi.cls alongside this file before compiling.
 
-\documentclass[remotesensing,article,submit,moreauthors,pdftex]{Definitions/mdpi}
+%% 'accept' (not 'submit') => no margin line numbers and single spacing.
+\documentclass[remotesensing,article,accept,moreauthors,pdftex]{Definitions/mdpi}
 
 %%---- Journal metadata (editorial office fills at proofing) ----
 \firstpage{1}
@@ -19,7 +20,7 @@
 \daterevised{}
 \dateaccepted{}
 \datepublished{}
-\hreflink{https://doi.org/}
+%% \hreflink is not defined in older Definitions/mdpi.cls versions; omit it.
 %%----------------------------------------------------------------
 
 %% Use external BibTeX (.bib) rather than an embedded thebibliography
@@ -1070,7 +1071,9 @@ Compute was provided by Google Colab's A100 GPU allocation.}
 
 %%================================================================
 \clearpage
-\bibliographystyle{mdpi}
+%% Do NOT add \bibliographystyle here: the MDPI class already emits
+%% \bibstyle{mdpi} when \externalbibliography{yes} is set. A second one
+%% triggers "Illegal, another \bibstyle command".
 \bibliography{references}
 %%================================================================
 
