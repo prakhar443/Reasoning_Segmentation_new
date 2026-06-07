@@ -316,7 +316,7 @@ and classification heads.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{figures/dataset_samples.png}
+  \includegraphics[width=\textwidth]{dataset_samples.png}
   \caption{Representative SAR images and corresponding binary ground-truth masks
            for all six ice categories. Note the near-identical visual appearance
            of Young Ice, First Year Ice, and Old Ice in single-band intensity,
@@ -343,7 +343,7 @@ $\hat{y} \in \{0,\ldots,5\}$.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{figures/architecture.png}
+  \includegraphics[width=\textwidth]{architecture.png}
   \caption{End-to-end architecture. Modules (1)--(5) are described in
            Sections~\protect\ref{sec:preproc}--\protect\ref{sec:loss}.
            Dashed arrows indicate frozen weights; solid arrows indicate
@@ -385,7 +385,7 @@ the preprocessing step.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{figures/preprocessing.png}
+  \includegraphics[width=\linewidth]{preprocessing.png}
   \caption{SAR preprocessing stages. (a) Raw backscatter amplitude.
            (b) After Lee speckle filtering ($7 \times 7$ window).
            (c) dB-converted pseudo-RGB normalised for CLIP input.
@@ -762,7 +762,7 @@ Several findings stand out:
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{figures/per_class_f1.png}
+  \includegraphics[width=\linewidth]{per_class_f1.png}
   \caption{Per-class F1 scores on the 90-image test split. Five of six classes
            reach F1\,$\geq$\,0.667; Glaciers, Icebergs, Young Ice, and Floating
            Ice achieve perfect F1\,=\,1.0. Old Ice is the sole failure (F1\,=\,0.000),
@@ -786,7 +786,7 @@ in Section~\ref{sec:oi_failure}.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{figures/sample_predictions.png}
+  \includegraphics[width=\textwidth]{sample_predictions.png}
   \caption{Qualitative segmentation results — one sample per ice class.
            Columns: (left) SAR input, (centre) Otsu ground-truth mask,
            (right) predicted mask with error overlay
@@ -813,7 +813,7 @@ immediately visible.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{figures/segmentation_overview.png}
+  \includegraphics[width=\textwidth]{seg_overview.png}
   \caption{Test-set segmentation performance. \emph{Left}: four aggregate metrics
            (mIoU, cIoU, Dice, Pixel Accuracy). \emph{Right}: per-class
            segmentation IoU for all six ice categories; the dashed red line marks
@@ -825,7 +825,7 @@ immediately visible.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{figures/confusion_matrix.png}
+  \includegraphics[width=\linewidth]{confusion.png}
   \caption{Normalised confusion matrix for six-class ice classification on the
            90-image test split. Diagonal entries confirm high accuracy for five
            classes. Old Ice is uniformly misclassified as First Year Ice,
@@ -909,7 +909,7 @@ illustrates sensitivity across the range $[0.2, 0.8]$.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{figures/threshold_sensitivity.png}
+  \includegraphics[width=\linewidth]{threshold.png}
   \caption{Threshold sensitivity on the 90-image test split. mIoU and Dice
            peak near 0.4, while the Precision--Recall crossover occurs around
            0.55. The default threshold of 0.5 provides a balanced operating
