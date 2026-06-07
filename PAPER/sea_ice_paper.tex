@@ -189,11 +189,11 @@ computationally lightweight but struggle to generalise across sensors,
 incidence angles, and seasons.
 
 The deep-learning wave reached SAR sea ice analysis around 2016--2020, with
-convolutional networks demonstrating superior accuracy on standard benchmarks.
-\citet{liu2021deep} trained a ResNet-based classifier on multi-temporal
-Sentinel-1 scenes, while several groups adapted U-Net
-\cite{ronneberger2015unet} to produce pixel-level sea ice concentration maps
-\cite{wang2021sarunet}. A notable limitation shared by all of these efforts is
+convolutional networks demonstrating superior accuracy on standard benchmarks,
+as surveyed by Liu et al.~\cite{liu2021deep}. ResNet-based classifiers
+\cite{he2016deep} were applied to multi-temporal Sentinel-1 scenes, while
+several groups adapted U-Net \cite{ronneberger2015unet} to produce pixel-level
+sea ice concentration maps \cite{wang2021sarunet}. A notable limitation shared by all of these efforts is
 the exclusive focus on either segmentation \emph{or} classification. More
 importantly, none incorporates natural-language conditioning — the image is
 treated as a standalone visual signal, and the semantic richness of contextual
