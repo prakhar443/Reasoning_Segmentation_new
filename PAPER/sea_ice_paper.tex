@@ -28,7 +28,7 @@
 %%---------------------------------------------------
 %%  Highlights (Elsevier requires 3–5, ≤85 chars each)
 %%---------------------------------------------------
-%% • First end-to-end pipeline for joint SAR sea ice segmentation and 6-class classification
+%% • First reported framework for joint SAR sea ice segmentation and 6-class classification
 %% • CLIP ViT-L/14 with rank-8 LoRA: only 0.52% of parameters are trainable
 %% • Cross-attention fusion of visual patch tokens with per-image language descriptions
 %% • Surpasses LISA-7B, CLIPSeg, and GeoPixel-7B on gIoU, cIoU, and Dice
@@ -47,9 +47,9 @@
 Monitoring sea ice type from single-channel Synthetic Aperture Radar (SAR)
 imagery is critical for climate science and polar navigation, yet speckle
 noise and radiometric ambiguity across ice types limit conventional pipelines,
-and no prior work has jointly addressed pixel-level segmentation and
-multi-class ice-type classification on SAR. We present the first
-proof-of-concept pipeline for this joint task. A frozen CLIP ViT-L/14 backbone,
+and, to the best of our knowledge, no prior work has jointly addressed
+pixel-level segmentation and multi-class ice-type classification on SAR.
+We present a proof-of-concept pipeline for this joint task. A frozen CLIP ViT-L/14 backbone,
 adapted with rank-8 LoRA adapters (1.57M of 304M parameters, 0.52\%), is fused
 with natural-language scene descriptions through cross-attention; an
 image-conditioned U-Net decoder predicts ice masks while an MLP head classifies
@@ -99,9 +99,10 @@ networks trained on labelled archives \cite{brekke2005sea,leigh2014automated}.
 More recent work has transplanted U-Net \cite{ronneberger2015unet} and
 ResNet-based pipelines to SAR data, improving detection robustness
 \cite{liu2021deep}. However, these efforts address either segmentation
-\emph{or} classification in isolation; none integrates natural-language
-context as a conditioning signal; and none establishes a public, reproducible
-combined baseline that a subsequent study can build on.
+\emph{or} classification in isolation; none that we are aware of integrates
+natural-language context as a conditioning signal; and, to the best of our
+knowledge, none establishes a public, reproducible combined baseline that a
+subsequent study can build on.
 
 Concurrently, the emergence of vision-language models (VLMs) has transformed
 image understanding more broadly. CLIP \cite{radford2021learning} demonstrated
@@ -128,10 +129,10 @@ decoder and the classifier.
 \noindent\textbf{Contributions.} This paper makes the following claims:
 
 \begin{enumerate}[leftmargin=*,label=\arabic*.]
-  \item We present the \textbf{first end-to-end deep-learning pipeline} for
-        simultaneous pixel-level segmentation and six-class ice-type
-        classification from single-band SAR imagery, establishing reproducible
-        baselines where none previously existed.
+  \item To the best of our knowledge, we present the \textbf{first reported
+        deep-learning framework} for simultaneous pixel-level segmentation and
+        six-class ice-type classification from single-band SAR imagery,
+        establishing reproducible baselines for this joint task.
 
   \item We show that a \textbf{frozen CLIP ViT-L/14 backbone equipped with
         rank-8 LoRA adapters} (0.52\% trainable parameters) can be
@@ -983,12 +984,13 @@ alternatives evaluated here.
 \label{sec:conclusion}
 %%====================================================================
 
-We have presented the first proof-of-concept pipeline for simultaneous pixel-
+We have presented a proof-of-concept pipeline for simultaneous pixel-
 level segmentation and six-class type classification of sea ice from single-band
-SAR imagery. By fusing a parameter-efficiently fine-tuned CLIP ViT-L/14
+SAR imagery — to the best of our knowledge, the first reported framework for
+this joint task. By fusing a parameter-efficiently fine-tuned CLIP ViT-L/14
 backbone with per-image language descriptions through cross-attention blocks,
 and training a U-Net decoder and a classification MLP jointly, we establish
-reproducible baselines where none previously existed: mIoU\,=\,0.351,
+reproducible baselines for it: mIoU\,=\,0.351,
 weighted-F1\,=\,0.778, and gIoU\,=\,0.391 on a 90-image held-out test split.
 
 Our model, with only 1.57 million trainable parameters, outperforms LISA-7B
