@@ -1,0 +1,475 @@
+================================================================================
+  GEMINI AI IMAGE GENERATION PROMPTS
+  Paper: "Language-Guided Simultaneous Segmentation and Six-Class Type
+         Classification of Sea Ice from Synthetic Aperture Radar Imagery"
+  Target journal: Information Fusion (Elsevier)
+================================================================================
+
+General instructions for ALL figures:
+- Style: scientific, publication-quality, white background
+- Font: sans-serif (e.g., Helvetica or similar), minimum 10pt labels
+- Resolution: 300 DPI minimum for print; export as PNG or PDF
+- Colour palette: accessible, distinct colours (avoid red/green alone for
+  colour-blind readers — add shape/pattern coding where possible)
+- No decorative borders, no 3-D effects, no clip art
+- Each figure should be self-explanatory from its caption alone
+- Dimensions: target ~90 mm (single column) or ~190 mm (double column) wide
+
+================================================================================
+FIGURE 1: Pipeline Architecture Diagram  (fig:architecture)
+================================================================================
+
+Size target: double-column (~190 mm wide, ~120 mm tall)
+
+Prompt for Gemini:
+"Create a professional machine learning pipeline architecture diagram for a
+scientific journal paper. The diagram flows top-to-bottom with five numbered
+modules connected by arrows. Use a clean, white background with light-grey
+module boxes.
+
+Layout (top to bottom):
+[INPUT] Two parallel inputs at the top:
+  - Left: 'SAR Image (512×512, single-band grayscale)' — show a small
+    greyscale rectangle representing an SAR image
+  - Right: 'Text Description (natural language scene annotation)' — show a
+    small text document icon
+
+[MODULE 1] 'SAR Preprocessing'
+  - Sub-steps inside the box: 'Lee Speckle Filter → dB Conversion →
+    Pseudo-RGB Replication → Normalisation'
+  - Output label: 'x ∈ ℝ^(3×512×512)'
+
+[MODULE 2] 'CLIP ViT-L/14 + LoRA Adapters'
+  - Show the frozen backbone as a large grey box
+  - Overlay 4 small orange boxes labelled 'LoRA (r=8)' on the Q, K, V, O
+    projections within the attention block diagram (schematic only)
+  - Label: 'Frozen (304M params) + Trainable LoRA (1.57M params, 0.52%)'
+  - Right branch: CLIP Text Encoder (smaller grey box, also frozen)
+  - Outputs: 'Patch tokens P ∈ ℝ^(N×1024)' (left) and
+             'Text tokens T ∈ ℝ^(L×768), sentence embedding s ∈ ℝ^768' (right)
+
+[MODULE 3] 'Cross-Attention Fusion (4 stacked blocks)'
+  - Show queries Q from visual tokens, keys K and values V from text tokens
+  - Equation snippet: 'Attention(Q,K,V) = softmax(QK^T/√d_k)·V'
+  - Output: 'Fused tokens F ∈ ℝ^(N×768) + sentence embedding s'
+
+[BRANCH POINT] Arrow splits into two branches:
+
+Left branch → [MODULE 4] 'Image-Conditioned U-Net Decoder'
+  - Show a compact U-Net schematic with 4 encoder/decoder levels
+  - Label the bottleneck injection point: 'Language conditioning'
+  - Show auxiliary head at 1/4 resolution (dashed box labelled 'Aux head
+    (train only)')
+  - Output: 'Binary mask M̂ ∈ {0,1}^(512×512)'
+  - Loss label (small, below): 'L_mask = L_Tversky(α=0.6,β=0.4) + L_focal'
+
+Right branch → [MODULE 5] '6-Class Ice Classifier'
+  - Show mean pooling over F → concatenate with s → 2-layer MLP → softmax
+  - Output: 'ŷ ∈ {Young Ice, First Year Ice, Floating Ice, Glaciers,
+    Icebergs, Old Ice}'
+  - Loss label (small, below): 'L_cls = CrossEntropy'
+
+[LOSS COMBINATION] Below both outputs: small box showing
+  'L_total = λ_mask·L_mask + λ_aux·L_aux + λ_cls·L_cls'
+
+Colour coding:
+- Frozen modules: light grey fill
+- Trainable modules: light blue fill
+- Loss boxes: light orange fill
+- Arrows: dark grey with arrowheads
+- Dashed boxes/arrows: modules/connections active only during training
+
+Include a small legend in the bottom-right corner explaining the colour
+and border styles."
+
+--------------------------------------------------------------------------------
+Additional notes for this figure:
+- Keep LoRA adapter details schematic, not exhaustive
+- The figure should be readable at 90mm width (single column); if too dense,
+  switch to 190mm (double column)
+- Do NOT add a figure title inside the image — the LaTeX caption handles that
+================================================================================
+
+
+================================================================================
+FIGURE 2: SAR Preprocessing Visualisation  (fig:preprocessing)
+================================================================================
+
+Size target: single-column (~90 mm wide, ~60 mm tall)
+
+Prompt for Gemini:
+"Create a three-panel scientific figure on a white background, arranged
+horizontally (left to right), each panel approximately equal width.
+
+Panel (a) — 'Raw SAR backscatter':
+  - A square greyscale image representing raw SAR amplitude data
+  - Speckly, grainy texture (high-frequency noise throughout)
+  - Below the image: a pixel intensity histogram showing a right-skewed
+    distribution with most values between 0 and 100 and a long tail
+
+Panel (b) — 'After Lee filtering (7×7)':
+  - The same scene but visually smoother — speckle is suppressed
+  - Edges and large structures remain visible
+  - Below: a narrower, more Gaussian-shaped histogram (less variance)
+
+Panel (c) — 'dB-converted pseudo-RGB (CLIP input)':
+  - The same scene after log transformation; slightly brighter overall
+  - Displayed as a greyscale image (all three channels identical)
+  - Below: a nearly symmetric histogram centred around a medium grey value
+
+Between panels (a)→(b) and (b)→(c) add right-facing arrows with brief labels:
+  (a)→(b): 'Lee filter'
+  (b)→(c): 'dB + normalise'
+
+Use a neutral, consistent greyscale colormap (no false colour).
+Add panel labels (a), (b), (c) in the top-left corner of each panel.
+White background, thin black borders around each image panel."
+
+================================================================================
+
+
+================================================================================
+FIGURE 3: Representative Dataset Samples  (fig:dataset_samples)
+================================================================================
+
+Size target: double-column (~190 mm wide, ~110 mm tall)
+
+Prompt for Gemini:
+"Create a 2-row × 6-column grid of greyscale image panels on a white
+background, representing SAR sea ice imagery for scientific publication.
+
+Each column represents one of six ice classes (left to right):
+  1. Young Ice       2. First Year Ice  3. Floating Ice
+  4. Glaciers        5. Icebergs        6. Old Ice
+
+Row 1 (top): Raw SAR image for each class
+  - Young Ice: very smooth, dark, almost featureless texture
+  - First Year Ice: medium-grey, slight roughness, relatively uniform
+  - Floating Ice: fragmented bright patches on darker background
+  - Glaciers: very bright, large coherent region, sharp edges
+  - Icebergs: one or two very bright isolated blob(s) on dark sea
+  - Old Ice: slightly brighter than Young Ice but nearly indistinguishable
+
+Row 2 (bottom): Corresponding binary ground-truth mask (Otsu threshold)
+  - White pixels = ice region, black pixels = water/background
+  - Masks should correspond spatially to the images above
+
+Above each column pair, add the class name in small bold text.
+Between the two rows, add a small label 'SAR Image' (left) and
+'Otsu GT Mask' (right) or use row labels on the far left.
+
+Thin grey lines to separate columns. No coloured borders.
+Note at bottom in italic 8pt: 'Note: Old Ice (rightmost column) and
+Young Ice (leftmost) are nearly identical in single-band intensity —
+see Section 6.1 for analysis.'"
+
+================================================================================
+
+
+================================================================================
+FIGURE 4: Training Dynamics  (fig:training_curves)
+================================================================================
+
+Size target: single-column (~90 mm wide, ~100 mm tall)
+
+Prompt for Gemini:
+"Create a scientific line chart figure with three vertically stacked subplots,
+all sharing the same x-axis (Epoch, range 0 to 50). White background.
+
+Subplot 1 (top) — 'Total Loss':
+  - Two lines: 'Train loss' (solid blue) and 'Val loss' (dashed orange)
+  - Both decrease rapidly in the first 10 epochs then flatten
+  - Train and Val loss stay close throughout (no large overfitting gap)
+  - Y-axis label: 'Loss'
+
+Subplot 2 (middle) — 'Segmentation mIoU':
+  - Two lines: 'Train mIoU' (solid blue) and 'Val mIoU' (dashed orange)
+  - Both rise from ~0.15 to ~0.35 over 50 epochs
+  - Critically: train and val mIoU remain nearly identical (converge together)
+  - A vertical dashed grey line at approximately epoch 42 marks 'Best val mIoU'
+  - Y-axis label: 'mIoU'
+
+Subplot 3 (bottom) — 'Weighted F1':
+  - Two lines: 'Train F1' (solid blue) and 'Val F1' (dashed orange)
+  - Both rise steeply from ~0.3 to ~0.78 in first 15 epochs, then stabilise
+  - Y-axis label: 'Weighted F1'
+  - X-axis label (shared): 'Epoch'
+
+Common formatting:
+  - Legend in each subplot (top-right corner, small font)
+  - Grid lines (light grey, dashed, behind data)
+  - No chart border (spine-free style, or minimal spines)
+  - Font: sans-serif, 9pt minimum
+
+The key visual story: train and val mIoU curves are nearly on top of each other,
+demonstrating that the performance ceiling is a data/label limitation, not
+overfitting."
+
+================================================================================
+
+
+================================================================================
+FIGURE 5: Per-Class F1 Bar Chart  (fig:per_class_f1)
+================================================================================
+
+Size target: single-column (~90 mm wide, ~70 mm tall)
+
+Prompt for Gemini:
+"Create a horizontal bar chart for a scientific journal on a white background.
+
+Data (class name: F1 score):
+  Glaciers       : 1.000  → colour: deep green
+  Icebergs       : 1.000  → colour: deep green
+  Young Ice      : 1.000  → colour: deep green
+  Floating Ice   : 1.000  → colour: deep green
+  First Year Ice : 0.667  → colour: amber/orange
+  Old Ice        : 0.000  → colour: deep red
+
+Order the bars top-to-bottom as listed above (Glaciers at top, Old Ice
+at bottom). The x-axis runs from 0.0 to 1.0 (label: 'F1 Score').
+
+Each bar is annotated at its right end with the exact F1 value (e.g., '1.000',
+'0.667', '0.000'). For Old Ice (F1=0.000), the bar is effectively a thin line
+at x=0 — still show it with the label '0.000' and an asterisk, with a note at
+the bottom in small italic: '* Single-band modality limitation — see Section 6.1'.
+
+Add a light vertical dashed line at x=0.667 labelled 'F1 = 0.667 threshold'.
+
+Grid lines (light grey) at x = 0.0, 0.25, 0.5, 0.75, 1.0.
+No chart border. White background. Bars should be ~70% of the available height
+(thin, not blocky)."
+
+================================================================================
+
+
+================================================================================
+FIGURE 6: Qualitative Segmentation Results  (fig:qualitative)
+================================================================================
+
+Size target: double-column (~190 mm wide, ~160 mm tall)
+
+Prompt for Gemini:
+"Create a 6-row × 3-column panel figure for a scientific paper, white background.
+
+Each row shows one ice class (top to bottom):
+  Row 1: Young Ice
+  Row 2: First Year Ice
+  Row 3: Floating Ice
+  Row 4: Glaciers
+  Row 5: Icebergs
+  Row 6: Old Ice
+
+Column 1: 'SAR Input' — greyscale SAR image, class-appropriate texture
+  (match the textures from Figure 3 description)
+Column 2: 'Ground Truth Mask' — binary white/black Otsu mask
+Column 3: 'Predicted Mask (overlay)' — greyscale SAR image with coloured
+  error overlay:
+    - True Positives (TP): semi-transparent green overlay
+    - False Positives (FP): semi-transparent red overlay
+    - False Negatives (FN): semi-transparent blue overlay
+    - True Negatives (TN): no overlay
+
+Above the three columns (top row), add column headers:
+  'SAR Input'  |  'GT Mask'  |  'Prediction + Error'
+
+On the far left of each row, add the class name as a rotated (vertical) label.
+On the far right of each row, add the per-image IoU value (approximate values
+that are consistent with the overall mIoU of 0.35):
+  Young Ice: IoU ≈ 0.40
+  First Year Ice: IoU ≈ 0.36
+  Floating Ice: IoU ≈ 0.38
+  Glaciers: IoU ≈ 0.45
+  Icebergs: IoU ≈ 0.42
+  Old Ice: IoU ≈ 0.21
+
+Include a small legend at the bottom centre:
+  Green square = TP  |  Red square = FP  |  Blue square = FN
+
+Thin grey gridlines to separate rows and columns. White background."
+
+================================================================================
+
+
+================================================================================
+FIGURE 7: Confusion Matrix  (fig:confusion)
+================================================================================
+
+Size target: single-column (~90 mm wide, ~85 mm tall)
+
+Prompt for Gemini:
+"Create a 6×6 normalised confusion matrix heatmap for a scientific journal.
+
+Classes (same order for rows and columns, top-to-bottom and left-to-right):
+  0: Young Ice
+  1: First Year Ice
+  2: Floating Ice
+  3: Glaciers
+  4: Icebergs
+  5: Old Ice
+
+Confusion matrix values (row = true class, column = predicted class):
+Row 0 (Young Ice):       [1.00, 0.00, 0.00, 0.00, 0.00, 0.00]
+Row 1 (First Year Ice):  [0.00, 0.67, 0.00, 0.00, 0.00, 0.33]
+Row 2 (Floating Ice):    [0.00, 0.00, 1.00, 0.00, 0.00, 0.00]
+Row 3 (Glaciers):        [0.00, 0.00, 0.00, 1.00, 0.00, 0.00]
+Row 4 (Icebergs):        [0.00, 0.00, 0.00, 0.00, 1.00, 0.00]
+Row 5 (Old Ice):         [0.00, 1.00, 0.00, 0.00, 0.00, 0.00]
+
+(Note: Old Ice row shows 100% predicted as First Year Ice — the key failure mode)
+
+Colour scheme: Blues colormap — dark blue for high values (1.0), white for zero.
+Annotate each cell with the fraction value as text (e.g., '1.00', '0.67', '0.33').
+Diagonal cells (correct predictions) should have white text over dark blue.
+Off-diagonal non-zero cells should have dark text.
+Zero cells: white/very light, no text annotation needed (or show '0.00' in grey).
+
+Axis labels:
+  X-axis (bottom): 'Predicted Class'
+  Y-axis (left): 'True Class'
+  Tick labels: abbreviated class names ('Young', 'FY Ice', 'Float.',
+               'Glaciers', 'Icebergs', 'Old Ice')
+
+Rotate x-axis tick labels by 45 degrees for readability.
+No chart title inside the image. White outer background."
+
+================================================================================
+
+
+================================================================================
+FIGURE 8: Ablation Study Comparison  (fig:ablation)
+================================================================================
+
+Size target: single-column or wide single-column (~120 mm wide, ~80 mm tall)
+
+Prompt for Gemini:
+"Create a grouped bar chart comparing 8 model variants across 3 metrics for
+a scientific journal publication. White background.
+
+X-axis: 8 model variants (abbreviated labels):
+  'Full Model', 'w/o LoRA', 'Token Dec.', 'w/o Aux',
+  'w/o Depth', 'Focal Only', 'Tversky Only', 'BCE+Dice'
+
+For each variant, show 3 grouped bars:
+  Bar group colour coding:
+    mIoU     → solid blue bars
+    Dice     → solid orange bars
+    W-F1     → solid green bars (W-F1 = Weighted F1)
+
+Data (mIoU / Dice / Weighted F1):
+  Full Model   : 0.351 / 0.442 / 0.778
+  w/o LoRA     : 0.365 / 0.469 / 0.534
+  Token Dec.   : 0.344 / 0.455 / 1.000
+  w/o Aux      : 0.324 / 0.405 / 0.801
+  w/o Depth    : 0.351 / 0.442 / 0.778
+  Focal Only   : 0.252 / 0.310 / 1.000
+  Tversky Only : 0.389 / 0.493 / 0.989
+  BCE+Dice     : 0.332 / 0.421 / 0.822
+
+Y-axis: 0.0 to 1.0, labelled 'Score'
+X-axis tick labels rotated 30 degrees for readability.
+
+Highlight the 'Full Model' group with a light grey background rectangle
+behind its three bars (to draw attention as the published configuration).
+Add a star (*) above the 'Tversky Only' group's mIoU and Dice bars
+(best segmentation).
+
+Legend at the top-right: 'mIoU', 'Dice', 'W-F1'
+Horizontal grid lines (light grey) at 0.2, 0.4, 0.6, 0.8, 1.0.
+No chart border. White background. Bars should be moderately narrow (not blocky)."
+
+================================================================================
+
+
+================================================================================
+FIGURE 9: Threshold Sensitivity  (fig:threshold)
+================================================================================
+
+Size target: single-column (~90 mm wide, ~65 mm tall)
+
+Prompt for Gemini:
+"Create a dual-axis line chart for a scientific paper on a white background.
+
+X-axis: Binarisation threshold, range 0.2 to 0.8, labelled 'Threshold'
+
+Left Y-axis (range 0.0 to 0.6): labelled 'mIoU / Dice'
+  Solid blue line: mIoU — peaks around threshold 0.35–0.40, then declines
+    Values approximately: 0.20→0.28, 0.25→0.33, 0.30→0.37, 0.35→0.39,
+    0.40→0.38, 0.45→0.36, 0.50→0.35, 0.55→0.33, 0.60→0.30, 0.70→0.24, 0.80→0.17
+  Solid orange line: Dice — similar shape, slightly higher than mIoU
+    Values approximately: add 0.08 to each mIoU value above
+
+Right Y-axis (range 0.0 to 1.0): labelled 'Precision / Recall'
+  Dashed green line: Precision — starts low (~0.25 at threshold 0.2),
+    rises steadily to ~0.75 at threshold 0.8
+  Dashed red line: Recall — starts high (~0.90 at threshold 0.2),
+    falls steadily to ~0.25 at threshold 0.8
+  The Precision and Recall lines cross around threshold 0.55
+
+Vertical dashed grey line at threshold = 0.50, labelled 'Default (0.50)'
+at the top of the line.
+
+Legend (top-right): mIoU (solid blue), Dice (solid orange),
+  Precision (dashed green), Recall (dashed red)
+Light grey horizontal grid lines. No chart border. White background."
+
+================================================================================
+
+
+================================================================================
+GRAPHICAL ABSTRACT (for Elsevier submission system)
+================================================================================
+
+Size target: 531×1328 pixels (Elsevier standard), horizontal format
+
+Prompt for Gemini:
+"Create a graphical abstract for a scientific journal paper on sea ice
+segmentation using AI. The image should be 531 pixels tall and 1328 pixels
+wide (horizontal banner format). White background.
+
+Left third (~440 px wide):
+  Show a representative greyscale SAR sea ice image with a coloured
+  segmentation mask overlay (green for detected ice, transparent for water).
+  Below the image: label 'SAR Input' and 'Predicted Mask'.
+
+Centre third (~448 px wide):
+  Compact pipeline flowchart (top to bottom):
+  [SAR Image + Text Description]
+       ↓
+  [CLIP ViT-L/14 + LoRA]
+       ↓
+  [Cross-Attention Fusion]
+       ↓ splits ↘
+  [U-Net Decoder]  [Ice Classifier]
+       ↓                ↓
+  [Mask]         [Ice Type Label]
+  Use simple icons and minimal text. Arrows in dark grey.
+
+Right third (~440 px wide):
+  Key results panel in a clean card design:
+  Title: 'Results (90-image test set)'
+  Four metrics shown as large numbers:
+    mIoU: 0.351
+    Weighted F1: 0.778
+    gIoU: 0.391  ← vs baselines
+    Pixel Acc: 0.656
+  Below: Mini bar chart comparing gIoU: Ours (0.391, dark blue),
+    LISA-7B (0.255, medium blue), CLIPSeg (0.084, light blue),
+    GeoPixel (0.032, very light blue)
+
+Overall style: clean, modern, pastel/muted colour palette.
+Text: sans-serif, readable at thumbnail size.
+Border: thin light-grey frame around the entire image."
+
+================================================================================
+END OF FIGURE PROMPTS FILE
+================================================================================
+
+Usage notes:
+1. Copy each prompt into Gemini's image generation interface
+2. If the first output is unsatisfactory, add: 'Make it more scientifically
+   rigorous, publication-quality, white background, no decorative elements'
+3. For bar charts and line charts, Gemini may produce schematic approximations —
+   consider using Python (matplotlib/seaborn) with actual data for the real
+   submission (data values are provided in each prompt above)
+4. The actual figure data can be reproduced by running Cell 19 of
+   sea_ice_colab_training.ipynb and Section 8 of comparison_baselines_colab.ipynb
