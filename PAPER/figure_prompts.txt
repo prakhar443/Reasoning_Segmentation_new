@@ -15,6 +15,24 @@ General instructions for ALL figures:
 - Each figure should be self-explanatory from its caption alone
 - Dimensions: target ~90 mm (single column) or ~190 mm (double column) wide
 
+--------------------------------------------------------------------------------
+HOW TO USE THE "LATEX TO PASTE" BLOCKS
+--------------------------------------------------------------------------------
+After generating each figure with Gemini:
+1. Save the image into a  figures/  subfolder next to sea_ice_paper.tex, using
+   the exact filename given in each LaTeX block (e.g. figures/architecture.png).
+2. In sea_ice_paper.tex, find the matching placeholder — the block that reads
+   \begin{figure}...\fbox{...[FIGURE PLACEHOLDER — fig:xxx]...}...\end{figure}
+   — and REPLACE the entire placeholder block with the "LATEX TO PASTE" code below.
+3. The preamble already loads \usepackage{graphicx}. Optionally add this line
+   once, just after the other \usepackage lines, so you can drop the "figures/"
+   prefix from every path:
+       \graphicspath{{figures/}}
+4. Single-column figures use \begin{figure} (width=\linewidth); full-width
+   figures use \begin{figure*} (width=\textwidth) so they span both columns.
+   Captions/labels below match the paper exactly — do not change the \label.
+--------------------------------------------------------------------------------
+
 ================================================================================
 FIGURE 1: Pipeline Architecture Diagram  (fig:architecture)
 ================================================================================
@@ -88,6 +106,21 @@ Additional notes for this figure:
 - The figure should be readable at 90mm width (single column); if too dense,
   switch to 190mm (double column)
 - Do NOT add a figure title inside the image — the LaTeX caption handles that
+
+--------------------------------------------------------------------------------
+>>> LATEX TO PASTE (replace the fig:architecture placeholder in sea_ice_paper.tex):
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/architecture.png}
+  \caption{End-to-end architecture. Modules (1)--(5) are described in
+           Sections~\protect\ref{sec:preproc}--\protect\ref{sec:loss}.
+           Dashed arrows indicate frozen weights; solid arrows indicate
+           trained connections. $\oplus$ denotes concatenation,
+           $\otimes$ denotes masked pooling.}
+  \label{fig:architecture}
+\end{figure*}
+--------------------------------------------------------------------------------
 ================================================================================
 
 
@@ -125,6 +158,20 @@ Use a neutral, consistent greyscale colormap (no false colour).
 Add panel labels (a), (b), (c) in the top-left corner of each panel.
 White background, thin black borders around each image panel."
 
+--------------------------------------------------------------------------------
+>>> LATEX TO PASTE (replace the fig:preprocessing placeholder in sea_ice_paper.tex):
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/preprocessing.png}
+  \caption{SAR preprocessing stages. (a) Raw backscatter amplitude.
+           (b) After Lee speckle filtering ($7 \times 7$ window).
+           (c) dB-converted pseudo-RGB normalised for CLIP input.
+           Histograms below each panel show the progressive redistribution
+           of pixel intensity.}
+  \label{fig:preprocessing}
+\end{figure}
+--------------------------------------------------------------------------------
 ================================================================================
 
 
@@ -163,6 +210,20 @@ Note at bottom in italic 8pt: 'Note: Old Ice (rightmost column) and
 Young Ice (leftmost) are nearly identical in single-band intensity —
 see Section 6.1 for analysis.'"
 
+--------------------------------------------------------------------------------
+>>> LATEX TO PASTE (replace the fig:dataset_samples placeholder in sea_ice_paper.tex):
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/dataset_samples.png}
+  \caption{Representative SAR images and corresponding binary ground-truth masks
+           for all six ice categories. Note the near-identical visual appearance
+           of Young Ice, First Year Ice, and Old Ice in single-band intensity,
+           which motivates the modality limitation analysis in
+           Section~\protect\ref{sec:oi_failure}.}
+  \label{fig:dataset_samples}
+\end{figure*}
+--------------------------------------------------------------------------------
 ================================================================================
 
 
@@ -205,6 +266,19 @@ The key visual story: train and val mIoU curves are nearly on top of each other,
 demonstrating that the performance ceiling is a data/label limitation, not
 overfitting."
 
+--------------------------------------------------------------------------------
+>>> LATEX TO PASTE (replace the fig:training_curves placeholder in sea_ice_paper.tex):
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/training_curves.png}
+  \caption{Training dynamics over 50 epochs. Train and validation mIoU
+           converge to similar values throughout training, indicating that
+           the performance ceiling is a property of the supervision signal
+           (Otsu-binarised scattering maps) rather than of overfitting.}
+  \label{fig:training_curves}
+\end{figure}
+--------------------------------------------------------------------------------
 ================================================================================
 
 
@@ -239,6 +313,20 @@ Grid lines (light grey) at x = 0.0, 0.25, 0.5, 0.75, 1.0.
 No chart border. White background. Bars should be ~70% of the available height
 (thin, not blocky)."
 
+--------------------------------------------------------------------------------
+>>> LATEX TO PASTE (replace the fig:per_class_f1 placeholder in sea_ice_paper.tex):
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/per_class_f1.png}
+  \caption{Per-class F1 scores on the 90-image test split. Five of six classes
+           reach F1\,$\geq$\,0.667; Glaciers, Icebergs, Young Ice, and Floating
+           Ice achieve perfect F1\,=\,1.0. Old Ice is the sole failure (F1\,=\,0.000),
+           attributable to the single-band modality limitation described in
+           Section~\protect\ref{sec:oi_failure}.}
+  \label{fig:per_class_f1}
+\end{figure}
+--------------------------------------------------------------------------------
 ================================================================================
 
 
@@ -287,6 +375,23 @@ Include a small legend at the bottom centre:
 
 Thin grey gridlines to separate rows and columns. White background."
 
+--------------------------------------------------------------------------------
+>>> LATEX TO PASTE (replace the fig:qualitative placeholder in sea_ice_paper.tex):
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/qualitative.png}
+  \caption{Qualitative segmentation results — one sample per ice class.
+           Columns: (left) SAR input, (centre) Otsu ground-truth mask,
+           (right) predicted mask with error overlay
+           (\textcolor{green}{green} = TP, \textcolor{red}{red} = FP,
+           \textcolor{blue}{blue} = FN).
+           The model captures broad ice extent but misses fine boundaries
+           (Boundary IoU $\approx$ 0.014), consistent with the coarse
+           Otsu supervision signal.}
+  \label{fig:qualitative}
+\end{figure*}
+--------------------------------------------------------------------------------
 ================================================================================
 
 
@@ -332,6 +437,20 @@ Axis labels:
 Rotate x-axis tick labels by 45 degrees for readability.
 No chart title inside the image. White outer background."
 
+--------------------------------------------------------------------------------
+>>> LATEX TO PASTE (replace the fig:confusion placeholder in sea_ice_paper.tex):
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/confusion_matrix.png}
+  \caption{Normalised confusion matrix for six-class ice classification on the
+           90-image test split. Diagonal entries confirm high accuracy for five
+           classes. Old Ice is uniformly misclassified as First Year Ice,
+           reflecting the near-identical single-band backscatter distributions
+           of the two types.}
+  \label{fig:confusion}
+\end{figure}
+--------------------------------------------------------------------------------
 ================================================================================
 
 
@@ -377,6 +496,24 @@ Legend at the top-right: 'mIoU', 'Dice', 'W-F1'
 Horizontal grid lines (light grey) at 0.2, 0.4, 0.6, 0.8, 1.0.
 No chart border. White background. Bars should be moderately narrow (not blocky)."
 
+--------------------------------------------------------------------------------
+>>> LATEX TO PASTE (OPTIONAL — the ablation is currently Table 2 in the paper):
+
+NOTE: sea_ice_paper.tex presents the ablation as Table~\ref{tab:ablation}, not a
+figure. Only add this block if you want the ablation ALSO shown as a bar chart;
+place it right after the ablation table (\label{tab:ablation}). Otherwise skip it.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/ablation.png}
+  \caption{Ablation study across eight model variants (mIoU, Dice, and weighted
+           F1) on the 90-image test split. The full model (highlighted) is
+           retained for its balanced operating point; Tversky-Only attains the
+           best raw segmentation. Exact values are listed in
+           Table~\protect\ref{tab:ablation}.}
+  \label{fig:ablation}
+\end{figure}
+--------------------------------------------------------------------------------
 ================================================================================
 
 
@@ -412,6 +549,19 @@ Legend (top-right): mIoU (solid blue), Dice (solid orange),
   Precision (dashed green), Recall (dashed red)
 Light grey horizontal grid lines. No chart border. White background."
 
+--------------------------------------------------------------------------------
+>>> LATEX TO PASTE (replace the fig:threshold placeholder in sea_ice_paper.tex):
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/threshold_sensitivity.png}
+  \caption{Threshold sensitivity on the 90-image test split. mIoU and Dice
+           peak near 0.4, while the Precision--Recall crossover occurs around
+           0.55. The default threshold of 0.5 provides a balanced operating
+           point.}
+  \label{fig:threshold}
+\end{figure}
+--------------------------------------------------------------------------------
 ================================================================================
 
 
@@ -460,6 +610,23 @@ Overall style: clean, modern, pastel/muted colour palette.
 Text: sans-serif, readable at thumbnail size.
 Border: thin light-grey frame around the entire image."
 
+--------------------------------------------------------------------------------
+>>> LATEX / SUBMISSION NOTE for the graphical abstract:
+
+The graphical abstract is NOT placed in the manuscript body. Elsevier's
+submission system asks for it as a SEPARATE file (save as
+figures/graphical_abstract.png, 531×1328 px). Upload it under the
+"Graphical Abstract" item during submission.
+
+If you also want it visible in the compiled PDF (some authors keep a copy on the
+title page for the review version), you may optionally paste this just after
+\begin{frontmatter} (before \title), then remove it for the final submission:
+
+% --- optional: graphical abstract preview in the review PDF only ---
+% \begin{graphicalabstract}
+%   \includegraphics[width=\linewidth]{figures/graphical_abstract.png}
+% \end{graphicalabstract}
+--------------------------------------------------------------------------------
 ================================================================================
 END OF FIGURE PROMPTS FILE
 ================================================================================
