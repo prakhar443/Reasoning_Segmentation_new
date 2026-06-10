@@ -20,10 +20,6 @@
 \daterevised{}
 \dateaccepted{}
 \datepublished{}
-%% \hreflink is not defined in older Definitions/mdpi.cls versions; omit it.
-%%----------------------------------------------------------------
-
-%% Use external BibTeX (.bib) rather than an embedded thebibliography
 \externalbibliography{yes}
 
 \usepackage{amsmath,amssymb}
@@ -37,55 +33,53 @@
 \usepackage{rotating}
 \usepackage{float}
 
-%%================================================================
-%%  PAPER METADATA
-%%================================================================
+\Title{Towards Language-Conditioned Sea-Ice Understanding: Joint Segmentation and Ice-Type Classification from SAR Imagery}
 
-\Title{Towards Reasoning-Aware Sea-Ice Understanding: Joint Segmentation and Ice-Type Classification from SAR Imagery}
+\Author{Prakhar Mishra\textsuperscript{1} and Bindu Verma\textsuperscript{2,*}}
 
-%% Replace with actual author names and affiliations before submission
-\Author{Author One\textsuperscript{1,*} and Author Two\textsuperscript{1}}
-
-\AuthorNames{Author One and Author Two}
+\AuthorNames{Prakhar Mishra and Bindu Verma}
 
 \address{%
-  \textsuperscript{1}\quad Department, Institution, City, Country;
-  author.two@institution.edu}
+  \textsuperscript{1,2}\quad Information Technology Department, Delhi Technological University, New Delhi, India;
+  443prakharmishra@gmail.com}
 
+%% TODO: replace with the corresponding author's real institutional email
 \corres{Correspondence: author.one@institution.edu}
 
-%%----------------------------------------------------------------
-%%  ABSTRACT  (MDPI: command, not environment; placed before \begin{document})
-%%----------------------------------------------------------------
 \abstract{%
 Monitoring sea ice type from single-channel Synthetic Aperture Radar~(SAR)
 imagery is critical for climate science and polar navigation, yet speckle
 noise and radiometric ambiguity across ice types limit conventional pipelines.
 To the best of our knowledge, no prior work has jointly addressed pixel-level
 segmentation and multi-class ice-type classification on SAR. We present a
-proof-of-concept framework that investigates how reasoning-oriented textual
-descriptions can improve joint sea-ice interpretation through multimodal
-fusion. A frozen CLIP ViT-L/14 backbone, adapted with rank-8 LoRA adapters
-(1.57\,M of 304\,M parameters, 0.52\%), is fused with natural-language scene
-descriptions through cross-attention; an image-conditioned U-Net decoder
-predicts ice masks while an MLP head classifies six ice types, trained jointly
-with a Focal--Tversky and cross-entropy objective. On a 90-image held-out
-split the model attains mIoU\,=\,0.351 and weighted-F1\,=\,0.778, and on a
-shared gIoU/cIoU/Dice harness scores 0.391/0.511/0.485, surpassing LISA-7B,
-CLIPSeg, and GeoPixel-7B under zero-shot conditions.}
+proof-of-concept, language-conditioned multimodal framework for this joint
+task. A frozen CLIP ViT-L/14 backbone, adapted with rank-8 LoRA adapters
+(1.57\,M of 304\,M parameters, 0.52\%), is conditioned on a natural-language
+prompt encoded by CLIP's text transformer and fused through cross-attention;
+an image-conditioned U-Net decoder predicts ice masks while an MLP head
+classifies six ice types, trained jointly with a Focal--Tversky and
+class-weighted cross-entropy objective. The published configuration uses a
+fixed, class-agnostic prompt for every image, so the reported classification
+scores cannot arise from label leakage through the text channel. On a 90-image
+held-out split the classifier attains weighted-F1\,=\,0.778 and accuracy
+0.833, while segmentation reaches mIoU\,=\,0.351 and cIoU\,=\,0.456. We report
+every segmentation result against the degenerate all-foreground baseline
+(mIoU\,=\,0.383 on this split): the model exceeds the floor on cumulative IoU,
+pixel accuracy, and precision, but not on per-image mIoU or Dice — a ceiling
+we attribute to the Otsu-binarised scattering-map supervision. The same
+harness shows zero-shot LISA-7B, CLIPSeg, and GeoPixel-7B all falling below
+the trivial floor, quantifying the substantial domain gap between optical
+foundation models and SAR imagery.}
 
-%%  MDPI keywords: semicolons, no \sep
-\keyword{SAR sea ice segmentation; reasoning-aware segmentation; CLIP; LoRA;
-cross-attention fusion; multimodal learning; remote sensing; cryosphere}
+\keyword{SAR sea ice segmentation; language-conditioned segmentation; CLIP;
+LoRA; cross-attention fusion; multimodal learning; remote sensing; cryosphere}
 
-%%================================================================
+
 \begin{document}
-%%================================================================
 
-%%====================================================================
 \section{Introduction}
 \label{sec:intro}
-%%====================================================================
+
 
 The polar cryosphere is changing at a pace that demands near-continuous, all-
 weather observation. Sea ice extent has declined at a rate of roughly
@@ -126,22 +120,22 @@ that aligning visual and textual representations through contrastive
 pretraining unlocks powerful zero-shot and few-shot capabilities. CLIPSeg
 \cite{luddecke2022image} extended this to open-vocabulary segmentation without
 any pixel-level supervision at train time. Most recently, reasoning-segmentation
-systems such as LISA \cite{lai2024lisa}, GLaMM \cite{rasheed2024glamm}, and
-PixelLM \cite{ren2024pixellm} have demonstrated the value of reasoning-informed
-visual understanding for complex segmentation tasks, coupling LLM decoders with
-pixel-level output heads to enable instruction-following mask prediction. However, their applicability to
+systems such as LISA \cite{lai2024lisa} have demonstrated the value of
+language-instructed visual understanding for complex segmentation tasks,
+coupling LLM decoders with pixel-level output heads to enable
+instruction-following mask prediction. However, their applicability to
 SAR-based cryospheric monitoring remains largely unexplored, as these models
 are pretrained predominantly on natural-image and optical remote-sensing corpora.
 A closely related paradigm targets underwater imagery \cite{underwater2024infofusion},
 establishing the gIoU/cIoU/Dice metric protocol that we adopt here for direct
 comparability.
 
-Our work investigates whether reasoning-oriented textual descriptions can bridge
-this gap for a domain (single-band SAR) where the largest foundation models have
-seen essentially no pretraining data. The key insight is that even when the image
-content is radiometrically ambiguous, associating each scene with a natural-language
-description of its acquisition context and ice type narrows the hypothesis space
-for both the segmentation decoder and the classifier.
+We emphasise the scope of the present work precisely: our model contains no
+large language model and generates no text. It is a \emph{language-conditioned}
+multimodal architecture — CLIP text embeddings fused with visual features by
+cross-attention — not a reasoning-segmentation system in the LISA sense. We
+use the published reasoning-segmentation systems as zero-shot comparison
+points, not as architectural peers.
 
 \medskip
 \noindent\textbf{Contributions.} This paper makes the following contributions:
@@ -153,15 +147,16 @@ for both the segmentation decoder and the classifier.
         six-class ice-type classification} from SAR imagery, establishing
         reproducible baselines for this joint task.
 
-  \item We introduce a \textbf{reasoning-informed multimodal fusion strategy}
-        that combines SAR observations with domain-specific textual
-        descriptions through cross-attention.
+  \item We introduce a \textbf{language-conditioned multimodal fusion
+        architecture} that combines SAR observations with textual prompts
+        through cross-attention.
 
   \item We provide a \textbf{detailed analysis of modality limitations,
         segmentation behaviour, and class-specific failure modes}, including
-        the complete classification collapse on Old Ice (F1\,=\,0.000), its
-        statistical root cause, and a concrete fix path using calibrated
-        dual-polarisation imagery.
+        an explicit comparison of every segmentation result against the
+        degenerate all-foreground baseline, the complete classification
+        collapse on Old Ice (F1\,=\,0.000), its statistical root cause, and a
+        concrete fix path using calibrated dual-polarisation imagery.
 
 \end{enumerate}
 
@@ -172,18 +167,6 @@ Section~\ref{sec:method} details the full model architecture and training
 objective. Section~\ref{sec:experiments} presents quantitative results and an
 ablation study. Section~\ref{sec:discussion} analyses key findings and
 limitations. Section~\ref{sec:conclusion} concludes.
-
-\medskip
-\noindent\textbf{Positioning.}
-Unlike recent reasoning-segmentation systems that generate masks in response
-to implicit natural-language queries, our objective is to investigate whether
-reasoning-oriented textual descriptions can improve joint sea-ice segmentation
-and classification within a purpose-trained multimodal framework. The proposed
-system should therefore be viewed as a \emph{reasoning-informed multimodal
-interpretation framework} rather than a full reasoning-segmentation model in
-the style of LISA or PixelLM. This distinction is intentional: it allows us to
-study the contribution of language conditioning in a controlled, domain-specific
-setting without the confounds introduced by large, opaque generative decoders.
 
 %%====================================================================
 \section{Related Work}
@@ -240,10 +223,7 @@ output head to enable instruction-following mask generation. LISA
 \cite{lai2024lisa} inserts a special \texttt{[SEG]} token into LLaVA-7B's
 vocabulary; when decoded, this token feeds a SAM-based mask head that produces
 the corresponding region. LISA achieves strong results on natural images and
-demonstrates genuine compositional reasoning from complex queries. GLaMM
-\cite{rasheed2024glamm} generalises this idea to grounded conversation
-generation, jointly producing natural-language responses and the corresponding
-pixel-level object groundings, and supports both textual and visual prompts.
+demonstrates genuine compositional reasoning from complex queries.
 
 GeoPixel \cite{geopixel2024} extends this paradigm to remote sensing by
 pretraining on geospatial imagery, adding SAM2-based mask refinement and
@@ -251,18 +231,13 @@ flash-attention-accelerated image encoding. Despite this domain specialisation,
 GeoPixel's pretraining corpus consists predominantly of optical remote-sensing
 imagery; its transfer to single-band SAR is limited by the modality gap.
 
-PixelLM \cite{ren2024pixellm} offers a lightweight alternative to the
-SAM-based family, replacing the heavy mask decoder with a simple segmentation
-codebook that translates pixel-level token predictions into masks, requiring no
-external mask decoder at inference. This makes PixelLM a natural comparison for
-future work on this dataset.
-
-While these systems demonstrate the value of reasoning-informed multimodal understanding
-in general-domain and optical remote-sensing settings, their applicability to
-SAR-based cryospheric monitoring remains largely unexplored. The SAR modality
-introduces a fundamental domain gap: backscatter intensities bear no direct
-resemblance to the photographic textures on which these models were pretrained,
-and none of them has access to in-domain labelled data at inference time.
+While these systems demonstrate the value of language-instructed multimodal
+understanding in general-domain and optical remote-sensing settings, their
+applicability to SAR-based cryospheric monitoring remains largely unexplored.
+The SAR modality introduces a fundamental domain gap: backscatter intensities
+bear no direct resemblance to the photographic textures on which these models
+were pretrained, and none of them has access to in-domain labelled data at
+inference time.
 
 A concurrent study on \emph{underwater} imagery \cite{underwater2024infofusion}
 establishes the three-metric comparison protocol — gIoU, cIoU, and Dice — that
@@ -290,8 +265,10 @@ even on a single GPU.
 \subsection{Image Corpus}
 
 The dataset comprises 600 SAR images evenly distributed across six sea ice
-categories (Table~\ref{tab:dataset}). Each image is a grayscale JPEG of a
-single SAR backscatter scene, resized to $512 \times 512$ pixels for processing.
+categories (Table~\ref{tab:dataset}). Each image is a single-channel grayscale
+JPEG of a SAR backscatter scene with a native resolution of
+$256 \times 256$ pixels; images are bilinearly upsampled to
+$512 \times 512$ at the input of the processing pipeline.
 The six categories cover the full spectrum of Arctic sea ice life cycle and
 morphology:
 
@@ -325,24 +302,55 @@ Old Ice         & 100 & 70 & 15 & 15 \\
 \end{tabular}
 \end{table}
 
-\subsection{Ground Truth and Text Descriptions}
+\subsection{Ground Truth: Derived Masks from Scattering Maps}
+\label{sec:groundtruth}
 
 For each image, a scattering map (stored as a second JPEG with filename suffix
 \texttt{\_scat}) captures the spatial distribution of backscatter intensity.
-Binary ground-truth masks are obtained by applying per-image Otsu thresholding
-\cite{otsu1979threshold} to these scattering maps at evaluation time, ensuring
-that the same binarisation logic is applied consistently across all methods in
-the comparison harness. This choice means our labels are a \emph{relative}
-threshold of each image's own intensity distribution — appropriate for single-
-band SAR where absolute calibration is unavailable.
+These maps are continuous-valued, \emph{not} expert semantic annotations, and
+their native resolution ($\approx 139 \times 187$, portrait) differs in both
+size and aspect ratio from the square $256 \times 256$ images.
+%% TODO: add \cite{} to the companion dataset paper (SeaIceReason) here and
+%% state explicitly that its semantic annotation maps are NOT used in this work.
 
-Text descriptions accompany each image in either CSV or XLSX format. These
-descriptions are concise scene-level annotations (typically one to three
-sentences) provided by domain annotators, recording acquisition context, visible
-ice features, and estimated ice type. During training and inference these
-descriptions are encoded by CLIP's text transformer and fused with the visual
-representation, providing the language signal that conditions our segmentation
-and classification heads.
+Binary ground-truth masks are derived at data-loading time in two steps.
+First, per-image Otsu thresholding \cite{otsu1979threshold} is applied to the
+scattering map at its native resolution, before any resampling, so that the
+threshold is computed on the true intensity distribution. Second, the binary
+mask is nearest-neighbour resized (non-uniformly stretched) to the image frame.
+Because the aspect ratios differ, this stretch introduces a geometric
+distortion of the label relative to the image content; we treat this as label
+noise inherent to the dataset and discuss its consequences in
+Section~\ref{sec:floor}. The same binarisation and resizing logic is applied
+identically to all methods in the comparison harness, so no method gains an
+evaluation-protocol advantage. The resulting labels are a \emph{relative}
+threshold of each map's own intensity distribution — appropriate for
+single-band SAR where absolute calibration is unavailable, but a coarse and
+imperfect supervision signal, as we quantify with the all-foreground baseline
+in Section~\ref{sec:mainresults}.
+
+\subsection{Text Prompts and Leakage Control}
+\label{sec:textprompts}
+
+The dataset ships per-image natural-language descriptions (one to three
+sentences recording acquisition context and visible ice features) in per-class
+spreadsheet files. However, descriptions generated with knowledge of the class
+are a potential leakage channel: even with the class name removed, text that
+paraphrases class-defining physics could let the classifier read the label
+from the prompt rather than the image.
+
+The published configuration therefore uses a \textbf{fixed, class-agnostic
+prompt for every image} — ``\emph{Identify and segment the most salient ice
+region in this SAR image. Where are the strongest backscatter features?}'' —
+encoded by CLIP's frozen text transformer and fused with the visual features.
+Because the text input is identical for all images and all classes, it carries
+zero class information, and the reported classification scores are by
+construction attributable to the visual pathway alone. The text branch in this
+configuration acts as a learned, constant conditioning signal rather than
+per-image semantic guidance; exploiting the per-image descriptions without
+re-introducing leakage (e.g., by scrubbing class-discriminative content) is
+left to future work. The per-image descriptions are included in the released
+dataset for that purpose.
 
 \begin{figure}[H]
   \centering
@@ -363,13 +371,14 @@ and classification heads.
 \subsection{Overview}
 
 Figure~\ref{fig:architecture} illustrates the complete pipeline, which comprises
-five sequential modules: (1) SAR preprocessing, (2) reasoning-aware visual
-encoding, (3) cross-attention text--visual fusion, (4) U-Net segmentation
+five sequential modules: (1) SAR preprocessing, (2) CLIP visual encoding with
+LoRA adaptation, (3) cross-attention text--visual fusion, (4) U-Net segmentation
 decoding, and (5) ice-type classification. Formally, given a SAR image
-$I \in \mathbb{R}^{H \times W}$ and an associated text description
+$I \in \mathbb{R}^{H \times W}$ and a text prompt
 $\mathcal{T}$, the model outputs a binary mask
 $\hat{M} \in \{0,1\}^{H \times W}$ and a class label
-$\hat{y} \in \{0,\ldots,5\}$.
+$\hat{y} \in \{0,\ldots,5\}$. No module generates language: the architecture
+performs feature-level fusion of CLIP text embeddings with visual tokens.
 
 \begin{figure}[H]
   \centering
@@ -424,7 +433,7 @@ the preprocessing step.
   \label{fig:preprocessing}
 \end{figure}
 
-\subsection{Reasoning-Aware Visual Encoder}
+\subsection{Visual Encoder with LoRA Adaptation}
 \label{sec:encoder}
 
 We use the CLIP ViT-L/14 vision transformer as our visual backbone. The image
@@ -453,7 +462,7 @@ training recovers the correct direction. With four projection matrices per
 attention block and 24 blocks in ViT-L/14, this yields approximately 1.57
 million trainable parameters — 0.52\% of the total model size.
 
-The text description $\mathcal{T}$ is encoded by CLIP's frozen text
+The text prompt $\mathcal{T}$ is encoded by CLIP's frozen text
 transformer to produce a sentence embedding
 $\mathbf{s} \in \mathbb{R}^{768}$ and token-level text features
 $\mathbf{T} \in \mathbb{R}^{L \times 768}$, where $L$ is the number of
@@ -476,7 +485,7 @@ blocks then integrate the two modalities:
 \noindent where queries $\mathbf{Q}$ are derived from the visual patch tokens
 and keys/values $\mathbf{K}, \mathbf{V}$ from the text token matrix
 $\mathbf{T}$. This asymmetric formulation asks: ``given what I see in this
-patch, which parts of the description are most relevant?'' Each block applies
+patch, which parts of the prompt are most relevant?'' Each block applies
 multi-head attention (8 heads), layer normalisation, and a feed-forward
 sublayer. The output is a fused token matrix
 $\mathbf{F} \in \mathbb{R}^{N \times 768}$ together with the sentence
@@ -490,7 +499,7 @@ transformer encoders alone cannot provide. We adopt an image-conditioned U-Net
 \cite{ronneberger2015unet} with four encoder--decoder scale levels. The fused
 token sequence $\mathbf{F}$ is reshaped into a spatial feature map and
 injected at the bottleneck of the U-Net via addition after a linear
-projection, conditioning the decoder on the language-fused representation.
+projection, conditioning the decoder on the text-fused representation.
 
 \paragraph{Auxiliary Deep Supervision.}
 To stabilise gradients at shallow layers, we append a lightweight prediction
@@ -514,17 +523,21 @@ embedding $\mathbf{s}$, and passing through a two-layer MLP:
 
 \noindent followed by a softmax over six classes. Masked pooling — restricting
 the average to tokens within the predicted mask region — was also explored but
-provided no consistent improvement and was not retained.
+provided no consistent improvement and was not retained. We reiterate that the
+prompt fed to the text branch is identical for every image
+(Section~\ref{sec:textprompts}), so the classifier's input carries no textual
+class information.
 
 \subsection{Multi-Task Loss Function}
 \label{sec:loss}
 
-The full model is trained with four loss terms:
+The full model is trained with four loss terms.
 
 \paragraph{Tversky Loss.}
-Standard binary cross-entropy weights false positives and false negatives
-equally. For sea ice segmentation, under-detecting ice (false negatives) is
-typically more costly than over-detecting it. The Tversky Index generalises the
+For these scattering-map targets, \emph{over}-detection is the dominant
+failure mode: with a mean foreground fraction of roughly 38\%, an
+all-foreground prediction is a stable minimum under objectives that penalise
+missed ice more heavily than false alarms. The Tversky Index generalises the
 Dice coefficient with asymmetric weighting \cite{salehi2017tversky}:
 
 \begin{equation}
@@ -540,10 +553,8 @@ Dice coefficient with asymmetric weighting \cite{salehi2017tversky}:
 \end{equation}
 
 \noindent Setting $\alpha = 0.6 > \beta = 0.4$ penalises false positives more
-than false negatives, guiding the model toward higher precision — a deliberate
-choice for our use case where the full model is retained for balanced
-precision--recall operation (ablation results in Table~\ref{tab:ablation} show
-that Tversky-Only achieves higher recall at the cost of precision).
+than false negatives, deliberately pushing the operating point away from the
+all-foreground degenerate solution and toward higher precision.
 
 \paragraph{Focal Loss.}
 To down-weight the contribution of easy, correctly classified background pixels
@@ -568,27 +579,36 @@ $y_{\text{aux}} \in \{0,1\}^{128 \times 128}$:
 \end{equation}
 
 \paragraph{Classification Loss.}
-Six-class classification is supervised with standard cross-entropy:
+Six-class classification is supervised with class-weighted cross-entropy
+(weights $1.0/1.0/1.5/1.5/1.5/1.0$ for Young/First-Year/Floating/Glaciers/
+Icebergs/Old):
 
 \begin{equation}
-  \mathcal{L}_{\text{cls}} = -\sum_{c=0}^{5} y_c \log \hat{y}_c.
+  \mathcal{L}_{\text{cls}} = -\sum_{c=0}^{5} w_c\, y_c \log \hat{y}_c.
   \label{eq:cls_loss}
 \end{equation}
 
+\paragraph{Attention Regularisation.}
+A small KL-divergence regulariser $\mathcal{L}_{\text{attn}}$ on the CLIP
+attention maps discourages attention collapse. It contributes no supervision
+signal beyond smoothing and carries a small weight.
+
 \paragraph{Total Objective.}
-The four terms are combined as:
+The terms are combined as:
 
 \begin{equation}
   \mathcal{L}_{\text{total}} =
-  \lambda_{\text{mask}} \!\left(\mathcal{L}_{\text{Tversky}} + \mathcal{L}_{\text{focal}}\right)
+  \lambda_{\text{mask}} \!\left(\mathcal{L}_{\text{focal}} + \mathcal{L}_{\text{Tversky}}\right)
   + \lambda_{\text{aux}} \,\mathcal{L}_{\text{aux}}
-  + \lambda_{\text{cls}} \,\mathcal{L}_{\text{cls}},
+  + \lambda_{\text{cls}} \,\mathcal{L}_{\text{cls}}
+  + \lambda_{\text{attn}} \,\mathcal{L}_{\text{attn}},
   \label{eq:total_loss}
 \end{equation}
 
-\noindent where $\lambda_{\text{mask}} = 1.0$, $\lambda_{\text{aux}} = 0.4$,
-and $\lambda_{\text{cls}} = 0.5$ are hyperparameters set by grid search on the
-validation set.
+\noindent where $\lambda_{\text{mask}} = 2.0$, $\lambda_{\text{aux}} = 0.2$,
+$\lambda_{\text{cls}} = 0.5$, and $\lambda_{\text{attn}} = 0.05$, selected
+empirically on the validation set. These values match the released training
+configuration exactly.
 
 %%====================================================================
 \section{Experiments}
@@ -598,36 +618,57 @@ validation set.
 \subsection{Implementation Details}
 
 All experiments were conducted on a single NVIDIA A100 40\,GB GPU. The model
-was trained with the AdamW optimiser \cite{loshchilov2019decoupled}
-($\beta_1=0.9$, $\beta_2=0.999$, weight decay $=10^{-4}$) and a cosine
-annealing learning rate schedule with an initial rate of $3 \times 10^{-4}$,
-decayed over 50 epochs with a warmup of 5 epochs. The batch size was 4, and
-training was stopped early if the validation mIoU did not improve for 12
-consecutive epochs (this patience was never triggered in the final run).
-The CLIP backbone was kept entirely frozen; only the LoRA parameters, the
-cross-attention fusion module, the U-Net decoder, and the MLP classifier
-were updated.
+was trained for 50 epochs with the AdamW optimiser
+\cite{loshchilov2019decoupled} ($\beta_1=0.9$, $\beta_2=0.999$, weight decay
+0.05) under a cosine annealing schedule with linear warmup over the first 5\%
+of steps. Per-module learning rates follow the released configuration: LoRA
+adapters $2\times10^{-4}$, U-Net decoder $2\times10^{-4}$, classification head
+$1\times10^{-4}$, and fusion module $5\times10^{-5}$. The batch size was 4
+with 4-step gradient accumulation (effective batch 16) and mixed-precision
+arithmetic. Training stops early if validation mIoU fails to improve for 12
+consecutive evaluations (not triggered in the final run). The CLIP backbone
+was kept entirely frozen; only the LoRA parameters, the cross-attention fusion
+module, the U-Net decoder, and the MLP classifier were updated. All
+hyperparameters above are taken verbatim from \texttt{config.py} in the
+released repository.
 
 \subsection{Evaluation Metrics}
 
 We report two complementary sets of metrics:
 
 \paragraph{Segmentation (primary).}
-\begin{itemize}[leftmargin=*]
+\begin{enumerate}[label=(\roman*), leftmargin=*]
   \item \textbf{mIoU}: mean Intersection over Union, averaged over images.
-  \item \textbf{cIoU}: cumulative IoU — total intersection divided by total
+
+  \item \textbf{cIoU}: cumulative IoU --- total intersection divided by total
         union over all pixels of the entire test set.
+
   \item \textbf{Dice}: mean per-image Dice coefficient
-        $= 2\,\text{TP} / (2\,\text{TP} + \text{FP} + \text{FN})$.
+        $= 2\,\mathrm{TP}/(2\,\mathrm{TP}+\mathrm{FP}+\mathrm{FN})$.
+
   \item \textbf{Pixel Accuracy}: fraction of correctly labelled pixels.
-\end{itemize}
+\end{enumerate}
 
 \paragraph{Classification (primary).}
-\begin{itemize}[leftmargin=*]
-  \item \textbf{Weighted F1}: class-wise F1 averaged by support (handles imbalance).
+\begin{enumerate}[label=(\roman*), leftmargin=*]
+  \item \textbf{Weighted F1}: class-wise F1 averaged by support.
+
   \item \textbf{Accuracy}: fraction of correctly labelled images.
+
   \item \textbf{Macro F1}: unweighted class-wise F1 average.
-\end{itemize}
+\end{enumerate}
+
+\paragraph{Degenerate baselines.}
+Because the Otsu-derived masks average roughly 38\% foreground, a trivial
+predictor that labels \emph{every} pixel as ice already obtains a substantial
+IoU. We therefore report the \textbf{all-foreground baseline} alongside every
+segmentation result: its per-image IoU equals the ground-truth foreground
+fraction, and on this test split it scores mIoU\,=\,0.383, cIoU\,=\,0.383,
+Dice\,=\,0.480, and pixel accuracy 0.383 (precision 0.383, recall 1.0). For
+classification, the corresponding floor is a uniform random classifier
+(expected accuracy and F1 $= 1/6 \approx 0.167$ on this balanced test set).
+The script \texttt{baseline\_allforeground.py} in the released repository
+reproduces these numbers deterministically.
 
 \paragraph{Comparison harness (gIoU / cIoU / Dice).}
 For the multi-model comparison, every method is evaluated through the same
@@ -636,54 +677,77 @@ image and outputs gIoU, cIoU, and Dice on the full 90-image test split. This
 design eliminates differences in evaluation code as a confound.
 
 \subsection{Main Results}
+\label{sec:mainresults}
 
 Table~\ref{tab:main_results} reports the test-set metrics for our model on the
-90-image held-out split.
+90-image held-out split, next to the degenerate baselines defined above.
 
 \begin{table}[H]
 \centering
 \caption{Test-set results on the 90-image held-out split
-         (15 images per class, stratified with \texttt{seed=42}).}
+         (15 images per class, stratified with \texttt{seed=42}), reported
+         against degenerate baselines: all-foreground prediction for
+         segmentation, uniform random choice for classification.}
 \label{tab:main_results}
-\begin{tabular}{llc}
+\begin{tabular}{llcc}
 \toprule
-\textbf{Task} & \textbf{Metric} & \textbf{Value} \\
+\textbf{Task} & \textbf{Metric} & \textbf{Model} & \textbf{Degenerate floor} \\
 \midrule
-\multirow{4}{*}{Segmentation}
-  & mIoU           & 0.351 \\
-  & cIoU           & 0.456 \\
-  & Dice           & 0.442 \\
-  & Pixel Accuracy & 0.656 \\
+\multirow{6}{*}{Segmentation}
+  & mIoU           & 0.351 & 0.383 \\
+  & cIoU           & \textbf{0.456} & 0.383 \\
+  & Dice           & 0.442 & 0.480 \\
+  & Pixel Accuracy & \textbf{0.656} & 0.383 \\
+  & Precision      & \textbf{0.444} & 0.383 \\
+  & Recall         & 0.640 & 1.000 \\
 \midrule
 \multirow{3}{*}{Classification}
-  & Weighted F1 & 0.778 \\
-  & Accuracy    & 0.833 \\
-  & Macro F1    & 0.778 \\
+  & Weighted F1 & \textbf{0.778} & 0.167 \\
+  & Accuracy    & \textbf{0.833} & 0.167 \\
+  & Macro F1    & \textbf{0.778} & 0.167 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\noindent Five of six ice classes achieve F1\,$\geq$\,0.667; four reach F1\,=\,1.0
-(Glaciers, Icebergs, Young Ice, Floating Ice). Old Ice is the sole
-complete failure (F1\,=\,0.000); the cause is analysed in
-Section~\ref{sec:oi_failure}.
+\noindent Two facts must be read together. First, the classifier is clearly
+effective: 0.833 accuracy against a 0.167 chance floor, achieved with a
+constant text prompt that precludes label leakage
+(Section~\ref{sec:textprompts}). Five of six ice classes achieve
+F1\,$\geq$\,0.667; four reach F1\,=\,1.0 (Glaciers, Icebergs, Young Ice,
+Floating Ice) — though we caution that with only 15 test images per class
+these per-class figures carry high variance. Old Ice is the sole complete
+failure (F1\,=\,0.000); the cause is analysed in Section~\ref{sec:oi_failure}.
 
-\subsection{Comparison with Reasoning-Segmentation Baselines}
+Second, and stated plainly: \textbf{on per-image overlap metrics the
+segmentation does not exceed the all-foreground floor} (mIoU 0.351 vs.\ 0.383;
+Dice 0.442 vs.\ 0.480). The model is not collapsed to that degenerate solution
+— its precision (0.444) is above the 0.383 foreground base rate, its recall
+(0.640) is far from the 1.0 of an all-foreground predictor, its pixel accuracy
+(0.656) and cumulative IoU (0.456) are well above the floor, and its per-class
+IoU spread (0.147--0.558) tracks scene structure — but the per-image
+intersection-over-union it achieves at this operating point is no better than
+the trivial baseline's. We analyse why in Section~\ref{sec:floor} and present
+the segmentation results throughout this paper as an honestly-reported
+ceiling of the current supervision, not as a demonstration of segmentation
+skill.
+
+\subsection{Comparison with Zero-Shot Segmentation Baselines}
 
 Table~\ref{tab:comparison} compares our model against three published methods
-under the shared evaluation harness. LISA-7B and GeoPixel-7B each run in an
-isolated Python 3.10 virtual environment with pinned 2023-era dependencies,
-preventing conflicts with the Colab runtime. CLIPSeg runs in the main Colab
-kernel. All baselines receive the same generic language prompt (``segment the
-sea ice region'') with no per-image tuning.
+under the shared evaluation harness, with the all-foreground floor included as
+a fourth row. LISA-7B and GeoPixel-7B each run in an isolated Python 3.10
+virtual environment with pinned 2023-era dependencies, preventing conflicts
+with the Colab runtime. CLIPSeg runs in the main Colab kernel. All baselines
+receive the same generic language prompt (``segment the sea ice region'') with
+no per-image tuning.
 
 \begin{table}[H]
 \centering
 \small
-\caption{Comparison against reasoning-segmentation baselines on the
-90-image SAR sea ice test split (gIoU / cIoU / Dice). All methods use the
-same evaluation harness and Otsu-binarised ground truth.
-$^\dag$~Operates zero-shot without any in-domain SAR training.}
+\caption{Comparison on the 90-image SAR sea ice test split
+(gIoU / cIoU / Dice). All methods use the same evaluation harness and
+Otsu-binarised ground truth. $^\dag$~Operates zero-shot without any in-domain
+SAR training.}
 \label{tab:comparison}
 \begin{tabular}{lccccc}
 \toprule
@@ -704,9 +768,14 @@ GeoPixel-7B$^\dag$ \cite{geopixel2024}
     & 7B
     & 0.032 & 0.035 & 0.060 \\
 
+All-foreground
+    & Trivial floor
+    & ---
+    & 0.383 & 0.383 & 0.480 \\
+
 \midrule
 \textbf{Ours}
-    & Reasoning-Aware SAR
+    & Lang.-cond.\ multimodal
     & 1.57M
     & \textbf{0.391}
     & \textbf{0.511}
@@ -715,15 +784,17 @@ GeoPixel-7B$^\dag$ \cite{geopixel2024}
 \end{tabular}
 \end{table}
 
-Our model leads on all three metrics, with the gap over LISA-7B particularly
-notable: 0.391 vs 0.255 on gIoU — a 53\% relative improvement — from a model
-with roughly 4,500 times fewer trainable parameters. The comparison is
-deliberately unfair in our direction (we have in-domain training; they do not),
-and Section~\ref{sec:comparison_analysis} discusses this nuance. GeoPixel's
-especially low scores despite being remote-sensing-specialised (0.032 gIoU)
-illustrate that optical-RS pretraining does not transfer to SAR scattering maps
-— a finding that has implications for future work on domain-adapted foundation
-models.
+The most informative row of Table~\ref{tab:comparison} is the trivial floor:
+\textbf{all three zero-shot systems score below a predictor that simply labels
+every pixel as ice}. This is the cleanest quantification we have of the domain
+gap between optical foundation-model pretraining and single-band SAR
+scattering data. Our purpose-trained model exceeds the floor clearly on cIoU
+($+0.128$) but only marginally on gIoU ($+0.008$) and Dice ($+0.005$); we
+therefore do not claim a decisive segmentation advantage over the trivial
+baseline, only over the zero-shot systems. The gap between our model and
+LISA-7B (0.391 vs.\ 0.255 gIoU) should likewise be read with the caveats of
+Section~\ref{sec:comparison_analysis}: we train on 420 in-domain images; they
+see none.
 
 \subsection{Ablation Study}
 \label{sec:ablation}
@@ -739,7 +810,8 @@ this budget mismatch is noted where it matters most.
 \small
 \caption{Ablation study on the 90-image test split.
 \textsuperscript{*}Ablated variants used $\leq$15 epochs (patience 5);
-the full model used 50 epochs. Bold indicates the best result.}
+the full model used 50 epochs. Bold indicates the best result. For reference,
+the all-foreground floor is mIoU\,=\,0.383, Dice\,=\,0.480.}
 \label{tab:ablation}
 \begin{tabular}{lccc p{3.8cm}}
 \toprule
@@ -795,15 +867,18 @@ and removing LoRA sharply degrades classification F1.
 
 Several findings stand out:
 
-\begin{itemize}[leftmargin=*]
-  \item \textbf{LoRA is critical for classification.} Removing it drops Weighted F1 from 0.778 to 0.534 ($-$0.244), confirming that the LoRA adapters learn ice-discriminative feature directions that are not present in the zero-shot CLIP embedding space.
+\begin{enumerate}[label=(\roman*), leftmargin=*]
 
-  \item \textbf{Tversky-Only is the best pure segmentation row} (mIoU\,=\,0.389, Dice\,=\,0.493), besting the full model on these metrics. The full model was retained because the combined Focal-Tversky objective provides a more balanced precision--recall operating point for operational deployment, not because it maximises mIoU.
+\item \textbf{LoRA is critical for classification.} Removing LoRA reduces the weighted F1 score from 0.778 to 0.534 ($-0.244$), indicating that the low-rank adaptation layers learn ice-discriminative representations that are not captured by the frozen zero-shot CLIP embedding space.
 
-  \item \textbf{Focal-Only collapses segmentation} (mIoU\,=\,0.252). In isolation, the Focal loss's per-pixel formulation concentrates gradient on hard examples but provides no direct overlap signal, which causes the model to produce uninformative masks.
+\item \textbf{Tversky-only yields the strongest segmentation performance.} This configuration achieves the highest segmentation scores (mIoU\,=\,0.389, Dice\,=\,0.493), outperforming the full model on both metrics — though we note it clears the all-foreground floor (0.383 / 0.480) by only $+0.006$ mIoU and $+0.013$ Dice. The combined Focal--Tversky objective was retained in the final model because it provides a more balanced precision--recall trade-off, rather than maximising mIoU alone.
 
-  \item \textbf{Depth encoder contributes nothing.} Bit-identical metrics confirm that the DepthAnything V2 depth channel (explored as an auxiliary depth cue) provides no additional discriminative information, consistent with the expectation that single-channel SAR images carry no photometric depth signal.
-\end{itemize}
+\item \textbf{Focal-only training leads to segmentation collapse.} When used in isolation, the Focal loss reduces segmentation performance substantially (mIoU\,=\,0.252). This suggests that hard-example reweighting alone is insufficient for accurate mask learning and that an explicit overlap-based objective remains necessary.
+
+\item \textbf{The depth encoder provides no measurable benefit.} The ablation produces bit-identical results across all reported metrics, indicating that the DepthAnything V2 branch contributes no additional discriminative information. This finding is consistent with the absence of meaningful photometric depth cues in single-channel SAR imagery.
+
+\end{enumerate}
+
 
 \subsection{Per-Class Performance}
 
@@ -859,16 +934,12 @@ red reference line marks the overall mean IoU so per-class deviations are
 immediately visible.
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=\linewidth]{seg_overview.png}
-  \caption{Test-set segmentation performance. \emph{Left}: four aggregate metrics
-           (mIoU, cIoU, Dice, Pixel Accuracy). \emph{Right}: per-class
-           segmentation IoU for all six ice categories; the dashed red line marks
-           the overall mIoU (0.351). Glaciers (0.558) and Old Ice (0.513) exceed
-           the mean; Young Ice (0.152) and Icebergs (0.147) are the weakest
-           segmentation classes.}
-  \label{fig:seg_overview}
+\centering
+\includegraphics[width=\linewidth]{seg_overview.png}
+\caption{Test-set segmentation performance. \emph{Left}: aggregate segmentation metrics (mIoU, cIoU, Dice, and Pixel Accuracy). \emph{Right}: per-class IoU across the six ice categories. The dashed red line indicates the overall mean IoU (0.351). Glaciers (0.558) and Old Ice (0.513) achieve the highest segmentation accuracy, whereas Young Ice (0.152) and Icebergs (0.147) remain the most challenging classes.}
+\label{fig:seg_overview}
 \end{figure}
+
 
 \begin{figure}[H]
   \centering
@@ -923,7 +994,39 @@ discriminative signal. The fix is clear: calibrated dual-polarisation SAR
 anisotropy, alpha angle) would restore the physical separability that
 single-band data discards.
 
-\subsection{Comparison with Reasoning-Segmentation Baselines}
+\subsection{Proximity to the All-Foreground Floor}
+\label{sec:floor}
+
+The most consequential honest finding of this study concerns the segmentation
+supervision. Because the Otsu-binarised scattering maps average roughly 38\%
+foreground, the degenerate all-foreground predictor obtains mIoU\,=\,0.383 and
+Dice\,=\,0.480 on the test split — values the full model does not exceed
+(0.351 / 0.442) and the best ablated variant exceeds only marginally
+(Tversky-only: 0.389 / 0.493).
+
+Three factors compound to produce this ceiling. First, the supervision is a
+per-image relative threshold of the same single-band intensity the model
+receives as input; the labels contain no information the input does not.
+Second, the scattering maps differ from the images in aspect ratio
+($\approx$139$\times$187 vs.\ 256$\times$256), so the non-uniform stretch that
+aligns them introduces geometric label noise that bounds achievable overlap.
+Third, train and validation mIoU remain nearly identical throughout all 50
+epochs — the model is not overfitting; it is saturating the information
+available in the supervision.
+
+The model's behaviour nonetheless differs qualitatively from the degenerate
+solution: precision 0.444 against a 0.383 base rate, recall 0.640 rather than
+1.0, pixel accuracy 0.656 against 0.383, and cumulative IoU 0.456 against
+0.383. The network localises — it recovers substantial true background, which
+an all-foreground predictor by definition cannot — but at this operating point
+the per-image overlap with the noisy labels is no higher than the trivial
+floor. We therefore present the segmentation track of this work as a
+documented supervision ceiling and a calibrated harness for future work, not
+as a performance claim. Breaking the ceiling requires better labels (expert
+annotation or properly co-registered scattering maps) or richer inputs
+(dual-polarisation channels), not a larger model.
+
+\subsection{Comparison with Zero-Shot Baselines}
 \label{sec:comparison_analysis}
 
 The 53\% relative gIoU advantage of our model over LISA-7B (0.391 vs 0.255)
@@ -940,11 +1043,11 @@ pretrained on optical remote-sensing imagery, it scores far below even CLIPSeg.
 The likely cause is the SAR modality gap — GeoPixel's spatial priors are tuned
 to photographic texture patterns that are entirely absent in SAR backscatter
 maps, and the model's grounding mechanism may not produce meaningful
-segmentation boundaries when the visual signal is unfamiliar. This finding
-reinforces the positioning articulated in Section~\ref{sec:intro}: reasoning-
-segmentation systems, however capable in their training domain, require
-explicit domain adaptation before they can serve as reliable tools for
-SAR-based cryospheric monitoring.
+segmentation boundaries when the visual signal is unfamiliar. That all three
+zero-shot systems fall below the all-foreground floor
+(Table~\ref{tab:comparison}) makes the point sharper still: without domain
+adaptation, current foundation models are not merely suboptimal on single-band
+SAR — they are worse than a constant prediction.
 
 We therefore wish to be explicit about how these comparisons should be read.
 The primary contribution of this work is not demonstrating superiority over
@@ -978,20 +1081,6 @@ illustrates sensitivity across the range $[0.2, 0.8]$.
   \label{fig:threshold}
 \end{figure}
 
-\subsection{Single-Band Performance Ceiling}
-
-A striking property of the learning process is that train mIoU and validation
-mIoU remain nearly identical throughout all 50 epochs — an observation logged
-in the training history but not reproduced as a separate figure here.
-This absence of a train--val gap means the model is not overfitting;
-rather, it is limited by the quality of the supervision signal. Ground-truth
-masks are Otsu-binarised scattering maps — a coarse, image-relative threshold
-applied to the same single-band intensity that the model receives as input.
-Fundamentally, no model trained on this supervision can learn boundaries that
-the Otsu threshold itself cannot resolve. Improving masks requires either
-expert manual annotation or calibrated multi-channel inputs that carry
-additional boundary information.
-
 \subsection{Components Found Not to Contribute}
 
 Three components present in the codebase — DepthAnything V2 depth encoding,
@@ -1002,7 +1091,10 @@ nothing on single-band imagery. The temporal module offered no measurable
 benefit on per-scene evaluation (the dataset has no temporal sequences). The
 SAM decoder was heavier than the U-Net alternative without producing better
 masks, so it was replaced. These components remain in the repository for
-reproducibility of their negative ablations.
+reproducibility of their negative ablations. Likewise, the repository contains
+optional BLIP-2 and LLaVA fusion backends; neither is used in any reported
+result — the published model is the cross-attention configuration with no
+language generation.
 
 \subsection{Limitations and Future Directions}
 
@@ -1011,64 +1103,75 @@ polarisation Sentinel-1 GRD products (HH + HV) or calibrated RADARSAT-2 SLC
 data would provide the physical separability between Old Ice and its lookalikes.
 A second direction is replacing per-image Otsu binarisation with expert-
 annotated masks, which would simultaneously improve the quality of the
-segmentation supervision signal and make the evaluation more meaningful.
+segmentation supervision signal, remove the aspect-ratio stretch noise
+described in Section~\ref{sec:groundtruth}, and make per-image overlap metrics
+meaningfully exceed the trivial floor for a competent model.
 
 On the architecture side, the cross-attention fusion module currently operates
 at the token level without explicit spatial awareness. Integrating position-
 encoded multi-scale features (as in DINO \cite{caron2021emerging} or
 Segment-Anything-2 \cite{ravi2024sam2}) could improve boundary localisation.
-Finally, the promising but pending PixelLM-7B baseline warrants completion;
-its lightweight decoder design may transfer better to SAR than the SAM-based
-alternatives evaluated here. More broadly, domain-adapted reasoning-segmentation
-models — trained on SAR corpora and equipped with polarimetric inputs — represent
-a natural evolution of this work.
+A further direction is exploiting the per-image descriptions shipped with the
+dataset: the published model deliberately uses a constant prompt to preclude
+label leakage (Section~\ref{sec:textprompts}), and designing a leakage-safe
+protocol for genuinely informative per-image text is an open problem. More
+broadly, domain-adapted reasoning-segmentation models — trained on SAR corpora
+and equipped with polarimetric inputs — represent a natural evolution of this
+work.
 
 %%====================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 %%====================================================================
 
-This work demonstrates the feasibility of combining pixel-level segmentation
-and six-class ice-type classification within a single reasoning-informed
-multimodal framework for SAR sea ice analysis. While the proposed model does
-not perform explicit reasoning segmentation in the style of recent large
-multimodal models such as LISA or PixelLM, the results suggest that
-reasoning-oriented textual descriptions provide a meaningful conditioning
-signal for domain-specific SAR interpretation: the framework scores
-gIoU\,=\,0.391, mIoU\,=\,0.351, and weighted-F1\,=\,0.778 on a 90-image
-held-out split, surpassing zero-shot reasoning-segmentation baselines with
-7\,B parameters while operating with only 1.57\,M trainable parameters.
+This work establishes, to the best of our knowledge, the first reported
+deep-learning baseline for joint pixel-level segmentation and six-class
+ice-type classification of sea ice from single-band SAR imagery, using a
+language-conditioned multimodal architecture with 1.57\,M trainable
+parameters. The results split cleanly into a positive and a negative finding,
+and we report both.
 
-At the same time, the complete failure on Old Ice classification and the
-persistent single-band performance ceiling reveal exactly where the next
-generation of sea ice analysis models must invest: calibrated multi-polarisation
-inputs and higher-quality per-pixel labels. These are not limitations of the
-multimodal conditioning strategy but of the underlying sensor modality, and
-addressing them is the natural next step. To the best of our knowledge, this
-is the first reported deep-learning framework for this joint task, and we
-hope the established baselines anchor future work — including domain-adapted
-reasoning-segmentation models that may eventually resolve the modality
-limitations identified here.
+The positive finding is classification: 0.833 accuracy and 0.778 weighted-F1
+against a 0.167 chance floor, obtained with a constant text prompt that rules
+out label leakage, with five of six ice types classified at F1\,$\geq$\,0.667.
+The negative findings are equally informative: segmentation against
+Otsu-binarised scattering maps does not exceed the all-foreground floor on
+per-image overlap metrics (mIoU 0.351 vs.\ 0.383), a ceiling we trace to the
+derived, geometrically distorted supervision rather than to the architecture;
+Old Ice classification collapses entirely (F1\,=\,0.000) for reasons rooted in
+the single-band modality; and all three zero-shot foundation-model baselines
+(LISA-7B, CLIPSeg, GeoPixel-7B) fall below even the trivial floor,
+quantifying the optical-to-SAR domain gap.
 
-We release all code, trained checkpoints, and the evaluation harness at
-\url{https://github.com/prakhar443/sea_ice_seg}.
+These results define exactly where the next generation of SAR sea-ice models
+must invest: calibrated multi-polarisation inputs, expert-annotated or
+properly co-registered labels, and leakage-safe protocols for informative
+per-image text. We release the code, the evaluation harness, and the
+degenerate-baseline script so that future work can be measured against the
+same honest yardsticks.
+
+We release all code and the evaluation harness at
+\url{https://github.com/prakhar443/sea_ice_seg}; the trained checkpoint is
+distributed through the repository's Releases page.
 
 %%================================================================
 %%  MDPI end matter
 %%================================================================
 
 \vspace{6pt}
-\authorcontributions{Conceptualization, A.O.\ and A.T.; methodology, A.O.;
-software, A.O.; validation, A.O.\ and A.T.; formal analysis, A.O.;
-investigation, A.O.; data curation, A.O.; writing---original draft
-preparation, A.O.; writing---review and editing, A.O.\ and A.T.;
-visualization, A.O.; supervision, A.T. All authors have read and agreed to
+\authorcontributions{Conceptualization, P.M.\ and B.V.; methodology, P.M.;
+software, P.M.; validation, P.M.\ and B.V.; formal analysis, P.M.;
+investigation, P.M.; data curation, P.M.; writing---original draft
+preparation, P.M.; writing---review and editing, P.M.\ and B.V.;
+visualization, P.M.; supervision, B.V. All authors have read and agreed to
 the published version of the manuscript.}
 
 \funding{This research received no external funding.}
 
-\dataavailability{Code, trained checkpoints, and the evaluation harness are
-publicly available at \url{https://github.com/prakhar443/sea_ice_seg}.}
+\dataavailability{Code, the evaluation harness, and the all-foreground
+baseline script are publicly available at
+\url{https://github.com/prakhar443/sea_ice_seg}. The trained model checkpoint
+is distributed through the repository's Releases page.}
 
 \acknowledgments{The authors thank the open-source communities behind CLIP,
 LoRA, and U-Net for making reproducible research on limited hardware accessible.

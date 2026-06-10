@@ -68,6 +68,17 @@ limitation — the model still over-predicts foreground, but no longer floods it
 per-class over-segmentation ratios are 0.94×–1.86×, down from up to 5.4× before
 loss rebalancing).
 
+**All-foreground floor (must be reported next to every segmentation number):**
+a trivial predictor labelling every pixel as ice scores mIoU 0.383, cIoU 0.383,
+Dice 0.480, pixel accuracy 0.383 on the test split (`baseline_allforeground.py`).
+The full model does NOT exceed this floor on per-image mIoU/Dice; it exceeds it
+on cIoU, pixel accuracy and precision (0.444 vs 0.383 base rate) with recall
+0.640 ≠ 1.0 — it localises, but its overlap with the noisy Otsu labels is no
+better than trivial. The paper states this plainly ("Proximity to the
+All-Foreground Floor") and frames segmentation as a supervision-ceiling result,
+not a performance claim. Tversky-only (0.389/0.493) clears the floor by only
++0.006 mIoU / +0.013 Dice.
+
 **Classification:** accuracy 0.833, macro-F1 0.778, weighted-F1 0.778. Per-class
 F1: Floating Ice, Glaciers, Icebergs, First Year Ice ≈ 1.0; Young Ice 0.667;
 **Old Ice 0.000** (see limitations).
