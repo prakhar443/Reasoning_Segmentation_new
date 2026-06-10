@@ -24,6 +24,7 @@ the loader converts it back to the image filename for the lookup key.
 import ast
 import json
 import random
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -145,6 +146,22 @@ def binarize_mask(gray: np.ndarray, mode: str = "otsu") -> np.ndarray:
     return binm
 
 
+def normalize_scat(gray: np.ndarray, mode: str = "minmax") -> np.ndarray:
+    """
+    Convert a continuous-valued `_scat` scattering map to a soft target in
+    [0, 1]. The raw maps occupy a narrow grey-level band (e.g. 22–174), so a
+    naive /255 would compress the dynamic range; per-image min-max stretches
+    each map to the full [0, 1] interval (mode="minmax", recommended).
+    """
+    g = gray.astype(np.float32)
+    if mode == "fixed255":
+        return g / 255.0
+    lo, hi = float(g.min()), float(g.max())
+    if hi - lo < 1e-6:                  # constant map — degenerate guard
+        return np.zeros_like(g)
+    return (g - lo) / (hi - lo)
+
+
 def letterbox_to_square(arr: np.ndarray, size: int, is_mask: bool) -> np.ndarray:
     """
     Resize a (H, W) array into a (size, size) canvas preserving aspect ratio,
@@ -177,6 +194,37 @@ def parse_description_cell(cell: str) -> str:
     except Exception:
         pass
     return str(cell).strip()
+
+
+# Class names and their obvious lexical variants (the annotator descriptions
+# write e.g. "first-year sea ice", "old, multi-year sea ice"). Longer phrases
+# first so they are replaced before any shorter sub-phrase could match.
+_CLASS_NAME_PATTERNS = [
+    r"old,?\s+multi[\s\-]?year\s+(?:sea\s+)?ice",
+    r"first[\s\-]?year\s+(?:sea\s+)?ice",
+    r"multi[\s\-]?year\s+(?:sea\s+)?ice",
+    # bare age modifiers ("first-year floe", "multi-year formation", "its
+    # first year") still identify the class — scrub the modifier itself
+    r"first[\s\-]?year", r"multi[\s\-]?year", r"second[\s\-]?year",
+    r"young\s+(?:sea\s+)?ice",
+    r"old\s+(?:sea\s+)?ice",
+    r"floating\s+(?:sea\s+)?ice",
+    r"icebergs?", r"glaciers?", r"glacial",
+]
+_CLASS_NAME_RE = re.compile("|".join(_CLASS_NAME_PATTERNS), flags=re.IGNORECASE)
+
+
+def scrub_class_names(text: str) -> str:
+    """
+    Replace ice-class names (and obvious variants) in a description with the
+    neutral phrase "ice region", so the classification head cannot read its
+    label from the text channel while the description still carries the
+    spatial / textural cues that guide segmentation.
+    """
+    scrubbed = _CLASS_NAME_RE.sub("ice region", text)
+    # Collapse accidental doubles ("ice region region") and whitespace
+    scrubbed = re.sub(r"\b(ice region)(\s+region)+\b", r"\1", scrubbed)
+    return re.sub(r"\s{2,}", " ", scrubbed).strip()
 
 
 # ─── Dataset ──────────────────────────────────────────────────────────────────
@@ -327,26 +375,43 @@ class SeaIceDataset(Dataset):
                         else:
                             continue   # no mask found → skip sample
 
-                # Retrieve description.
-                # To keep classification metrics honest, the prompt must NOT name
-                # the ice class (otherwise the cls head reads the answer from text).
+                # ── Retrieve the text that navigates segmentation ──────────────
+                # Reasoning-segmentation mode (use_image_descriptions=True):
+                # the per-image annotator description is the model's text input —
+                # it conditions the mask decoder, so the text actively guides
+                # WHERE to segment. Class names are scrubbed by default so the
+                # 6-class head cannot read its answer from the text channel.
                 use_name = getattr(self.data_cfg, "use_class_name_in_prompt", False)
+                use_desc = getattr(self.data_cfg, "use_image_descriptions", True)
+                scrub = getattr(self.data_cfg, "scrub_class_names", True)
+
                 if use_name:
-                    desc = desc_map.get(img_path.name, {
+                    fallback = {
                         "short": f"Segment the {ice_class} in this SAR image.",
                         "long":  (
                             f"Identify and segment the {ice_class} region. "
                             f"Where is the most characteristic feature of this ice type visible?"
                         ),
-                    })
+                    }
                 else:
-                    desc = {
+                    fallback = {
                         "short": "Segment the dominant ice region in this SAR image.",
                         "long":  (
                             "Identify and segment the most salient ice region in this "
                             "SAR image. Where are the strongest backscatter features?"
                         ),
                     }
+
+                if use_desc:
+                    desc = dict(desc_map.get(img_path.name, fallback))
+                    for key in ("short", "long"):
+                        val = str(desc.get(key, "")).strip()
+                        if not val or val.lower() in {"nan", "none"}:
+                            desc[key] = fallback[key]
+                    if scrub:
+                        desc = {k: scrub_class_names(v) for k, v in desc.items()}
+                else:
+                    desc = fallback
 
                 self.samples.append({
                     "image_path": str(img_path),
@@ -372,10 +437,17 @@ class SeaIceDataset(Dataset):
         # ── Load mask ──────────────────────────────────────────────────────────
         mask_gray = np.array(Image.open(sample["mask_path"]).convert("L"))  # (Hm, Wm)
 
-        # Binarize the continuous scattering map BEFORE any resize, so Otsu sees
-        # the true intensity distribution rather than interpolated values.
-        binarize_mode = getattr(self.data_cfg, "mask_binarize", "otsu")
-        mask_bin = binarize_mask(mask_gray, mode=binarize_mode)  # (Hm, Wm) {0,1}
+        target_mode = getattr(self.data_cfg, "mask_target_mode", "soft_scat")
+        if target_mode == "soft_scat":
+            # The raw `_scat` map IS the ground truth: per-image min-max
+            # normalise to a continuous [0,1] soft target. Done BEFORE any
+            # resize so normalisation sees the native intensity distribution.
+            norm_mode = getattr(self.data_cfg, "soft_mask_norm", "minmax")
+            mask_t = normalize_scat(mask_gray, mode=norm_mode)   # (Hm, Wm) float
+        else:
+            # Legacy mode: Otsu-binarise the scattering map before any resize.
+            binarize_mode = getattr(self.data_cfg, "mask_binarize", "otsu")
+            mask_t = binarize_mask(mask_gray, mode=binarize_mode)  # (Hm, Wm) {0,1}
 
         # Bring image and mask to a common spatial layout.
         # Masks (~138×187) and images (256×256) differ in aspect ratio. Two modes:
@@ -385,13 +457,17 @@ class SeaIceDataset(Dataset):
         if resize_mode == "letterbox":
             side = max(img_pil.size)  # work on a square canvas (W==H for these imgs)
             img_np = letterbox_to_square(img_np, side, is_mask=False)
-            mask_np = letterbox_to_square(mask_bin, side, is_mask=True)
+            mask_np = letterbox_to_square(
+                mask_t.astype(np.float32), side, is_mask=(target_mode != "soft_scat")
+            )
         else:
-            if (mask_bin.shape[1], mask_bin.shape[0]) != img_pil.size:  # (W,H)
-                mask_bin = np.array(
-                    Image.fromarray(mask_bin).resize(img_pil.size, Image.NEAREST)
+            if (mask_t.shape[1], mask_t.shape[0]) != img_pil.size:  # (W,H)
+                resample = Image.BILINEAR if target_mode == "soft_scat" else Image.NEAREST
+                mask_t = np.array(
+                    Image.fromarray(mask_t.astype(np.float32), mode="F")
+                    .resize(img_pil.size, resample)
                 )
-            mask_np = mask_bin
+            mask_np = mask_t.astype(np.float32)
 
         # ── Augmentation (spatial transforms applied to both img and mask) ─────
         augmented = self.aug(image=img_np, mask=mask_np)

@@ -48,8 +48,19 @@ class DataConfig:
     image_mean: Tuple[float, ...] = (0.485, 0.456, 0.406)
     image_std: Tuple[float, ...] = (0.229, 0.224, 0.225)
 
-    # Mask handling — the '_scat' masks are continuous scattering maps, not
-    # clean binary labels, and have a different aspect ratio than the images.
+    # ── Ground-truth definition ───────────────────────────────────────────────
+    # "soft_scat" (REASONING-SEG MODEL, default) — the raw `_scat` scattering
+    #   maps ARE the ground truth. Each map is per-image min-max normalised to
+    #   [0, 1] and used as a continuous (soft) target; no Otsu binarisation.
+    #   Binary metrics (IoU / Dice / F1) binarise the soft GT at
+    #   `eval_mask_threshold` of the normalised map.
+    # "binary" (LEGACY) — per-image Otsu threshold derives a hard {0,1} mask
+    #   (the previously published pipeline).
+    mask_target_mode: str = "soft_scat"  # "soft_scat" | "binary"
+    soft_mask_norm: str = "minmax"       # "minmax" (per-image) | "fixed255"
+    eval_mask_threshold: float = 0.5     # binarise soft GT + preds for metrics
+
+    # Mask handling for the LEGACY binary mode only.
     mask_binarize: str = "otsu"          # "otsu" | "mean" | "fixed"
     # Images are 256×256 (square); the `_scat` masks are ~138×187 (portrait).
     # They cover the SAME scene at different sampling resolutions, so the mask
@@ -60,8 +71,21 @@ class DataConfig:
     # fraction ~0.32). Keep "stretch" unless image and mask share an aspect ratio.
     mask_resize_mode: str = "stretch"    # "stretch" (aligned) | "letterbox"
 
-    # When False, descriptions never name the ice class — prevents the
-    # classification head from cheating via the text prompt (honest F1).
+    # ── Reasoning-segmentation text channel ───────────────────────────────────
+    # When True, the per-image annotator descriptions (dataset/*/descriptions/)
+    # are fed to the model and *navigate* segmentation: the text conditions the
+    # mask decoder, not just the classifier. This is the reasoning-segmentation
+    # configuration.
+    use_image_descriptions: bool = True
+
+    # When True, ice-class names ("glacier", "iceberg", ...) are scrubbed from
+    # the descriptions and replaced with the neutral token "ice region", so the
+    # 6-class head cannot read its answer from the text (honest F1). Set False
+    # to allow the full, unredacted descriptions through.
+    scrub_class_names: bool = True
+
+    # When False, *fallback* prompts (used when an image has no description)
+    # never name the ice class.
     use_class_name_in_prompt: bool = False
 
     # Train / val / test split ratios
@@ -142,6 +166,14 @@ class ModelConfig:
     decoder_type: str = "unet"
     decoder_base_channels: int = 32      # U-Net width; drop to 16 if VRAM-tight
 
+    # ── Reasoning-segmentation decoder conditioning ───────────────────────────
+    # When True the U-Net decoder is text-guided: (a) the text-fused visual
+    # tokens are injected at the bottleneck alongside the raw CLIP patch
+    # tokens, (b) the sentence embedding FiLM-modulates the bottleneck, and
+    # (c) a text–pixel similarity map is concatenated before the mask head.
+    # The text therefore *navigates* the segmentation, not just classification.
+    text_guided_decoder: bool = True
+
     # ── Prompt generator ──────────────────────────────────────────────────────
     attn_threshold: float = 0.70
     max_prompts_per_image: int = 3
@@ -205,6 +237,14 @@ class TrainConfig:
     focal_alpha: float = 0.5
     tversky_alpha: float = 0.6          # ↑ penalise false positives (curb over-seg)
     tversky_beta: float = 0.4
+
+    # Soft-target mask loss (mask_target_mode="soft_scat"). The continuous
+    # scattering map is regressed directly: BCE-with-logits accepts soft
+    # targets, soft Tversky keeps region overlap as the primary signal, and a
+    # small L1 term sharpens the regression toward the exact scat values.
+    soft_bce_weight: float = 1.0
+    soft_tversky_weight: float = 1.0
+    soft_l1_weight: float = 0.5
 
     # Mixed precision
     fp16: bool = True

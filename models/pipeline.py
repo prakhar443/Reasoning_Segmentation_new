@@ -1,12 +1,17 @@
 """
-models/pipeline.py — Sea ice SAR segmentation & classification pipeline.
+models/pipeline.py — Sea ice SAR reasoning-segmentation & classification pipeline.
 
-Published 5-module model (what the paper claims):
+Reasoning-segmentation 5-module model:
   1. SARPreprocessor         (data/preprocessing.py)
   2. CLIPSAREncoder + LoRA   (models/visual_encoder.py)       ← domain adaptation
-  3. CrossAttentionFusion    (models/reasoning_module.py)     ← image↔text fusion only, no language generation
-  4. ImageUNetDecoder        (models/sam_module.py)           ← segmentation w/ Tversky + aux loss
+  3. CrossAttentionFusion    (models/reasoning_module.py)     ← per-image description ↔ image fusion
+  4. ImageUNetDecoder        (models/sam_module.py)           ← TEXT-GUIDED decoder: the description
+                                                                navigates segmentation (fused tokens at
+                                                                bottleneck + FiLM + text-pixel similarity)
   5. IceTypeClassifier       (models/ice_classifier.py)       ← 6-class MLP
+
+Ground truth: the raw `_scat` scattering maps (continuous, min-max normalised
+to [0,1]) — NOT Otsu-binarised masks. See config.DataConfig.mask_target_mode.
 
 Additional modules wired in but disabled/non-contributing in published results:
   - DepthAnyV2Encoder       (models/depth_encoder.py)        ← evaluated, no effect, OFF
@@ -109,10 +114,22 @@ class SeaIceSegmentationPipeline(nn.Module):
     def _build_light_decoder(self, model_cfg):
         """Construct the non-SAM mask decoder selected by model_cfg.decoder_type."""
         if self.decoder_type == "unet":
+            # Reasoning-segmentation decoder: when text_guided_decoder is on,
+            # the bottleneck receives CLIP patch tokens AND the text-fused
+            # tokens, and the description embedding steers the decoder (FiLM +
+            # text-pixel similarity). text_dim=0 reproduces the legacy
+            # image-only decoder.
+            text_guided = getattr(model_cfg, "text_guided_decoder", True)
+            cond_dim = model_cfg.clip_hidden_dim
+            text_dim = 0
+            if text_guided:
+                cond_dim = model_cfg.clip_hidden_dim + model_cfg.fusion_dim
+                text_dim = model_cfg.fusion_dim
             return ImageUNetDecoder(
                 image_size=default_cfg.data.image_size,
-                cond_dim=model_cfg.clip_hidden_dim,
+                cond_dim=cond_dim,
                 base=getattr(model_cfg, "decoder_base_channels", 32),
+                text_dim=text_dim,
             )
         return LightweightMaskDecoder(
             in_dim=model_cfg.fusion_dim,
@@ -200,15 +217,25 @@ class SeaIceSegmentationPipeline(nn.Module):
                 mask_logits = torch.zeros(B, 1, H, W, device=device)
                 masks_hw = mask_logits
         elif self.decoder_type == "unet":
-            # U-Net decodes the full-resolution image, conditioned on CLIP
-            # patch tokens for ice-type semantics → sharp, image-grounded masks.
-            # During training return the /4-scale aux head for deep supervision.
+            # Reasoning-segmentation path: the U-Net decodes the full-resolution
+            # image while the per-image description steers it — text-fused
+            # tokens join the CLIP patch tokens at the bottleneck and the
+            # sentence embedding modulates the decoder (FiLM + text-pixel
+            # similarity). During training return the /4-scale aux head for
+            # deep supervision.
+            if (getattr(self.mask_decoder, "text_dim", 0) > 0
+                    and fused_tokens.shape[1] == patch_tokens.shape[1]):
+                cond = torch.cat([patch_tokens, fused_tokens], dim=-1)
+                text_emb = sent_emb
+            else:
+                cond = patch_tokens
+                text_emb = None
             if return_aux:
                 mask_logits, aux_logits = self.mask_decoder(
-                    images, patch_tokens, return_aux=True
+                    images, cond, text_emb=text_emb, return_aux=True
                 )
             else:
-                mask_logits = self.mask_decoder(images, patch_tokens)
+                mask_logits = self.mask_decoder(images, cond, text_emb=text_emb)
             masks_hw = torch.sigmoid(mask_logits)
         else:
             # Token decoder path (returns logits).

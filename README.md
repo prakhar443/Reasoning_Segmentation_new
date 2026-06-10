@@ -1,75 +1,90 @@
-# Sea Ice SAR: Joint Segmentation & Ice-Type Classification
+# Sea Ice SAR: Reasoning Segmentation & Ice-Type Classification
 
-Language-conditioned multimodal baseline for **joint** pixel-level sea-ice
-segmentation and six-class ice-type classification from single-band SAR
-imagery. Companion code for the MDPI Remote Sensing submission
-*"Towards Language-Conditioned Sea-Ice Understanding: Joint Segmentation and
-Ice-Type Classification from SAR Imagery"*.
+Reasoning-segmentation pipeline for **joint** pixel-level sea-ice segmentation
+and six-class ice-type classification from single-band SAR imagery, where the
+**text and the image jointly navigate the segmentation**: each image's
+annotator description conditions the mask decoder, not just the classifier.
 
-## What the published model is (and is not)
+## What the model is
 
-The published pipeline (`llm_backend = "cross_attn_only"` in `config.py`) is:
+The reasoning-segmentation pipeline (defaults in `config.py`) is:
 
 1. **SAR preprocessing** — Lee filter (7×7) → dB conversion → pseudo-RGB
    (`data/preprocessing.py`)
 2. **CLIP ViT-L/14 + rank-8 LoRA** on Q/K/V/O projections — 1.57 M trainable
    of 304 M (`models/visual_encoder.py`)
-3. **Cross-attention text–visual fusion** — CLIP text embeddings as K/V,
-   visual patch tokens as Q (`models/reasoning_module.py`)
-4. **Image-conditioned U-Net decoder** with auxiliary deep supervision
-   (`models/sam_module.py::ImageUNetDecoder`)
+3. **Cross-attention text–visual fusion** — the per-image description's CLIP
+   text embeddings as K/V, visual patch tokens as Q
+   (`models/reasoning_module.py`)
+4. **Text-guided U-Net decoder** (`models/sam_module.py::ImageUNetDecoder`,
+   `text_guided_decoder=True`): the text-fused tokens are injected at the
+   bottleneck alongside the CLIP patch tokens, the description's sentence
+   embedding FiLM-modulates the bottleneck (per-channel γ/β), and a
+   **text–pixel cosine-similarity map** is concatenated before the mask head.
+   The description therefore steers *where* the mask goes.
 5. **6-class MLP classifier** (`models/ice_classifier.py`)
 
-It contains **no LLM and generates no language**. BLIP-2 / LLaVA backends, a
-SAM decoder, a DepthAnything V2 branch, and a temporal-consistency module
-exist in the codebase as evaluated-and-excluded alternatives (kept for
-ablation reproducibility); none contributes to any reported number.
+BLIP-2 / LLaVA backends, a SAM decoder, a DepthAnything V2 branch, and a
+temporal-consistency module exist in the codebase as evaluated-and-excluded
+alternatives (kept for ablation reproducibility).
+
+### Ground truth: raw `_scat` maps (not Otsu masks)
+
+The continuous `_scat` scattering maps **are** the ground truth
+(`mask_target_mode = "soft_scat"` in `config.py`): each map is per-image
+min–max normalised to [0, 1] and regressed directly as a soft target
+(BCE + soft Tversky + L1, `utils/losses.py::SoftMaskLoss`). Otsu-binarised
+masks are no longer used as labels (the legacy behaviour remains available
+via `mask_target_mode = "binary"`). Binary metrics (IoU / Dice / F1) binarise
+the soft GT at 0.5 of its normalised range (`utils/metrics.py`).
 
 ### Leakage control
 
-The published run uses a **fixed, class-agnostic text prompt for every image**
-(`use_class_name_in_prompt = False` in `config.py`; see
-`data/dataset.py` lines ~330–349). The text input is identical across all
-images and classes, so classification scores cannot arise from label leakage
-through the text channel. The per-image annotator descriptions shipped in
-`dataset/*/descriptions/` are **not** used by the published model.
+The per-image descriptions name the ice type ("glacier", "first-year sea
+ice", …), which would let the classifier read its answer from the text
+channel. By default (`scrub_class_names = True`) all class names and their
+lexical variants are scrubbed from the descriptions and replaced with the
+neutral phrase "ice region" before they reach the model, so the descriptions
+keep their spatial/textural cues (the part that navigates segmentation) while
+classification F1 stays leakage-free. Set `scrub_class_names = False` to feed
+the unredacted text (higher F1, but no longer leakage-controlled).
 
-## Headline results (90-image held-out test split, seed 42)
+## Previous published results (90-image held-out test split, seed 42)
 
-| Task | Metric | Model | Degenerate floor |
+These were measured by the earlier constant-prompt model **against the old
+Otsu-binary GT** — they are the baseline this reasoning-segmentation model is
+trained to beat:
+
+| Task | Metric | Previous model | Floor |
 |---|---|---|---|
-| Segmentation | mIoU | 0.351 | **0.383** (all-foreground) |
-| Segmentation | cIoU | **0.456** | 0.383 |
-| Segmentation | Dice | 0.442 | **0.480** |
-| Segmentation | Pixel accuracy | **0.656** | 0.383 |
-| Classification | Accuracy | **0.833** | 0.167 (chance) |
-| Classification | Weighted F1 | **0.778** | 0.167 |
+| Segmentation | mIoU | 0.351 | 0.330 (all-foreground, scat GT) |
+| Segmentation | cIoU | 0.456 | 0.330 |
+| Segmentation | Dice | 0.442 | 0.411 |
+| Classification | Accuracy | 0.833 | 0.167 (chance) |
+| Classification | Weighted F1 | 0.778 | 0.167 |
 
-**Read honestly:** the classifier clearly beats chance with a leakage-free
-constant prompt; the segmentation does **not** exceed the all-foreground floor
-on per-image mIoU/Dice (it does on cIoU, pixel accuracy and precision). The
-floor exists because the Otsu-binarised `_scat` scattering maps average ~38 %
-foreground; see the paper's "Proximity to the All-Foreground Floor" section.
-Reproduce the floor with:
+Reproduce the degenerate floor under the new scat GT with:
 
 ```bash
-python baseline_allforeground.py --split test   # no GPU / torch needed
+python baseline_allforeground.py --split test --gt scat   # no GPU / torch needed
+python baseline_allforeground.py --split test --gt otsu   # legacy Otsu floor (0.383)
 ```
 
 ## Repository layout
 
 ```
 config.py                     # single source of truth for all hyperparameters
-train.py                      # end-to-end training (reproduces the published run)
+train.py                      # end-to-end training
 evaluate.py                   # test-set evaluation: metrics, confusion matrix, JSON report
 inference.py                  # single-image inference + visualisation
 baseline_allforeground.py     # degenerate all-foreground baseline (numpy/PIL/cv2 only)
 quickstart.py                 # smoke test of the pipeline
 data/                         # dataset + SAR preprocessing code
-models/                       # pipeline modules (see "What the published model is")
+models/                       # pipeline modules (see "What the model is")
 utils/                        # losses, metrics
 dataset/                      # 600 images: <Class>/{images,masks,descriptions}
-sea_ice_colab_training.ipynb  # Colab notebook: training + ablations + figures
+reasoning_seg_colab_training.ipynb  # ★ Colab: reasoning-seg training + evaluation + demos
+sea_ice_colab_training.ipynb  # legacy Colab notebook (constant-prompt, Otsu-GT model)
 comparison_baselines_colab.ipynb  # zero-shot LISA/CLIPSeg/GeoPixel comparison harness
 PAPER/                        # LaTeX source of the manuscript
 DOCUMENTATION/                # scope/claims documentation (PAPER_SCOPE.md etc.)
@@ -93,23 +108,23 @@ Python ≥ 3.10. A CUDA GPU with ≥ 16 GB VRAM is recommended for training
 
 - `images/` — native 256×256 grayscale JPEGs (e.g. `1_1003_.jpg`)
 - `masks/` — continuous-valued scattering maps, ~139×187 portrait
-  (e.g. `1_1003_scat.jpg`). Binary masks are derived at load time:
-  per-image Otsu threshold **before** any resize, then nearest-neighbour
-  stretch to the image frame (`mask_binarize="otsu"`,
-  `mask_resize_mode="stretch"` in `config.py`). These are **derived labels**,
-  not expert annotations; the image/mask aspect-ratio mismatch introduces
-  geometric label noise that is acknowledged in the paper.
-- `descriptions/` — per-image text descriptions (xlsx/csv). **Unused by the
-  published model** (see Leakage control above).
+  (e.g. `1_1003_scat.jpg`). **These raw maps are the ground truth**: at load
+  time each is per-image min–max normalised to [0, 1] (before any resize) and
+  bilinear-stretched to the image frame (`mask_target_mode="soft_scat"`,
+  `mask_resize_mode="stretch"` in `config.py`). The image/mask aspect-ratio
+  mismatch introduces geometric label noise that is acknowledged in the paper.
+- `descriptions/` — per-image text descriptions (xlsx/csv). **Used by the
+  reasoning-segmentation model** as the text that navigates segmentation,
+  after class-name scrubbing (see Leakage control above).
 
-## Reproducing the paper
+## Reproducing
 
 | Artifact | Command |
 |---|---|
-| Train the published model | `python train.py` (defaults in `config.py` are the published configuration) |
+| Train the reasoning-seg model | `python train.py` (defaults in `config.py`) |
 | Main results table | `python evaluate.py --checkpoint outputs/best_model.pth --output eval_results/` |
-| All-foreground floor | `python baseline_allforeground.py --split test` |
-| Ablation table | notebook `sea_ice_colab_training.ipynb`, section 18 |
+| All-foreground floor (scat GT) | `python baseline_allforeground.py --split test --gt scat` |
+| Full Colab run (train + eval + demos) | notebook `reasoning_seg_colab_training.ipynb` |
 | Zero-shot comparison (LISA/CLIPSeg/GeoPixel) | notebook `comparison_baselines_colab.ipynb` |
 
 The train/val/test split is deterministic (stratified per class,

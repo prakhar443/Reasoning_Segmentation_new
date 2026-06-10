@@ -1,9 +1,11 @@
 """
 utils/losses.py — Combined loss functions for the sea ice segmentation pipeline.
 
-  L_total = λ_mask * L_tversky + λ_aux * L_aux + λ_cls * L_ce + λ_cot * L_attn
+  L_total = λ_mask * L_mask + λ_aux * L_aux + λ_cls * L_ce + λ_cot * L_attn
 
-L_mask / L_tversky: Tversky segmentation loss (α=0.6, β=0.4) — primary segmentation driver
+L_mask: SoftMaskLoss (BCE + soft Tversky + L1) when the raw `_scat` maps are
+        the ground truth (mask_target_mode="soft_scat", default), or
+        Focal + Tversky for the legacy Otsu-binary mode.
 L_aux:              Auxiliary deep-supervision loss at ¼ resolution — +0.027 mIoU
 L_cls:              6-class ice-type cross-entropy (weighted)
 L_attn (λ_cot):     Attention-map regularisation — KL divergence on CLIP attention weights.
@@ -134,6 +136,55 @@ class MaskLoss(nn.Module):
         return self.focal_w * focal + self.tversky_w * tversky
 
 
+# ─── Soft-target mask loss (raw `_scat` maps as ground truth) ─────────────────
+
+class SoftMaskLoss(nn.Module):
+    """
+    Mask loss for CONTINUOUS [0,1] targets (mask_target_mode="soft_scat",
+    where the min-max-normalised `_scat` scattering map is the ground truth).
+
+      L = w_bce * BCEWithLogits(logits, soft)        — pixel-wise regression in
+                                                       probability space (BCE
+                                                       accepts soft targets)
+        + w_tversky * Tversky(sigmoid(logits), soft) — region-overlap signal;
+                                                       the soft formulation
+                                                       degrades gracefully to
+                                                       Dice on binary targets
+        + w_l1 * L1(sigmoid(logits), soft)           — sharpens the regression
+                                                       toward exact scat values
+
+    Focal loss is intentionally absent: its easy/hard weighting assumes hard
+    labels and mis-weights mid-valued soft pixels.
+    """
+
+    def __init__(
+        self,
+        bce_weight: float = 1.0,
+        tversky_weight: float = 1.0,
+        l1_weight: float = 0.5,
+        tversky_alpha: float = 0.5,
+        tversky_beta: float = 0.5,
+        smooth: float = 1e-4,
+    ):
+        super().__init__()
+        self.tversky = TverskyLoss(tversky_alpha, tversky_beta, smooth)
+        self.bce_w = bce_weight
+        self.tversky_w = tversky_weight
+        self.l1_w = l1_weight
+
+    def forward(
+        self,
+        mask_logits: torch.Tensor,  # (B, 1, H, W) — raw logits
+        mask_target: torch.Tensor,  # (B, 1, H, W) — soft target in [0, 1]
+    ) -> torch.Tensor:
+        target = mask_target.clamp(0.0, 1.0)
+        bce = F.binary_cross_entropy_with_logits(mask_logits, target)
+        prob = torch.sigmoid(mask_logits)
+        tversky = self.tversky(prob, target)
+        l1 = F.l1_loss(prob, target)
+        return self.bce_w * bce + self.tversky_w * tversky + self.l1_w * l1
+
+
 # ─── Weighted classification loss ─────────────────────────────────────────────
 
 class WeightedClassificationLoss(nn.Module):
@@ -215,13 +266,26 @@ class SeaIceLoss(nn.Module):
         from config import cfg
         train_cfg = train_cfg or cfg.train
 
-        # Loss shape is config-driven so over-segmentation can be tuned without
-        # code edits: α>β in Tversky penalises false positives (curbs flooding).
-        self.mask_loss = MaskLoss(
-            focal_alpha=getattr(train_cfg, "focal_alpha", 0.5),
-            tversky_alpha=getattr(train_cfg, "tversky_alpha", 0.5),
-            tversky_beta=getattr(train_cfg, "tversky_beta", 0.5),
-        )
+        # Mask-loss selection follows the ground-truth definition:
+        #   soft_scat — raw `_scat` maps as continuous GT → SoftMaskLoss
+        #   binary    — legacy Otsu masks                 → Focal + Tversky
+        target_mode = getattr(cfg.data, "mask_target_mode", "soft_scat")
+        if target_mode == "soft_scat":
+            self.mask_loss = SoftMaskLoss(
+                bce_weight=getattr(train_cfg, "soft_bce_weight", 1.0),
+                tversky_weight=getattr(train_cfg, "soft_tversky_weight", 1.0),
+                l1_weight=getattr(train_cfg, "soft_l1_weight", 0.5),
+                tversky_alpha=getattr(train_cfg, "tversky_alpha", 0.5),
+                tversky_beta=getattr(train_cfg, "tversky_beta", 0.5),
+            )
+        else:
+            # Loss shape is config-driven so over-segmentation can be tuned
+            # without code edits: α>β in Tversky penalises false positives.
+            self.mask_loss = MaskLoss(
+                focal_alpha=getattr(train_cfg, "focal_alpha", 0.5),
+                tversky_alpha=getattr(train_cfg, "tversky_alpha", 0.5),
+                tversky_beta=getattr(train_cfg, "tversky_beta", 0.5),
+            )
         self.cls_loss = WeightedClassificationLoss()
         self.attn_loss = AttentionGuidanceLoss()
 

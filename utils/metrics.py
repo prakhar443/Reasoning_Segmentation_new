@@ -18,14 +18,23 @@ from config import ICE_CLASSES
 
 
 # ─── Segmentation metrics ─────────────────────────────────────────────────────
+# Ground-truth masks may be SOFT (continuous `_scat` maps in [0,1] under
+# mask_target_mode="soft_scat"). All binary metrics therefore binarise the
+# target at the same threshold as the prediction; for legacy {0,1} masks this
+# is a no-op.
+
+def _binarize_target(target: torch.Tensor, threshold: float = 0.5) -> torch.Tensor:
+    return (target >= threshold).float()
+
 
 def compute_iou(
     pred: torch.Tensor,   # (B, 1, H, W) probability or binary
-    target: torch.Tensor, # (B, 1, H, W) binary
+    target: torch.Tensor, # (B, 1, H, W) binary or soft [0,1]
     threshold: float = 0.5,
     smooth: float = 1e-6,
 ) -> float:
     pred_bin = (pred >= threshold).float()
+    target = _binarize_target(target, threshold)
     intersection = (pred_bin * target).sum(dim=(1, 2, 3))
     union = pred_bin.sum(dim=(1, 2, 3)) + target.sum(dim=(1, 2, 3)) - intersection
     iou = (intersection + smooth) / (union + smooth)
@@ -39,6 +48,7 @@ def compute_dice(
     smooth: float = 1e-6,
 ) -> float:
     pred_bin = (pred >= threshold).float()
+    target = _binarize_target(target, threshold)
     intersection = (pred_bin * target).sum(dim=(1, 2, 3))
     denom = pred_bin.sum(dim=(1, 2, 3)) + target.sum(dim=(1, 2, 3))
     dice = (2.0 * intersection + smooth) / (denom + smooth)
@@ -51,6 +61,7 @@ def compute_pixel_accuracy(
     threshold: float = 0.5,
 ) -> float:
     pred_bin = (pred >= threshold).float()
+    target = _binarize_target(target, threshold)
     correct = (pred_bin == target).float().sum()
     total = target.numel()
     return (correct / total).item()
@@ -73,6 +84,7 @@ def compute_intersection_union(
     """Return (total_intersection, total_union) summed over the batch — the
     raw tallies cIoU accumulates across the entire dataset."""
     pred_bin = (pred >= threshold).float()
+    target = _binarize_target(target, threshold)
     inter = (pred_bin * target).sum()
     union = pred_bin.sum() + target.sum() - inter
     return inter.item(), union.item()
@@ -86,6 +98,7 @@ def compute_giou(
 ) -> float:
     """gIoU = mean of per-image IoU (LISA generalized IoU)."""
     pred_bin = (pred >= threshold).float()
+    target = _binarize_target(target, threshold)
     inter = (pred_bin * target).sum(dim=(1, 2, 3))
     union = pred_bin.sum(dim=(1, 2, 3)) + target.sum(dim=(1, 2, 3)) - inter
     iou = (inter + smooth) / (union + smooth)
@@ -103,6 +116,7 @@ def compute_boundary_iou(
     = `dilation`). Erosion is done with min-pooling (= -maxpool(-x)). Rewards
     sharp, well-localised edges, which pixel IoU can mask."""
     pred_bin = (pred >= threshold).float()
+    target = _binarize_target(target, threshold)
 
     def _boundary(m):
         k = dilation * 2 + 1
@@ -123,6 +137,7 @@ def compute_precision_recall(
 ):
     """Per-image pixel precision & recall, averaged over the batch."""
     pred_bin = (pred >= threshold).float()
+    target = _binarize_target(target, threshold)
     tp = (pred_bin * target).sum(dim=(1, 2, 3))
     fp = (pred_bin * (1.0 - target)).sum(dim=(1, 2, 3))
     fn = ((1.0 - pred_bin) * target).sum(dim=(1, 2, 3))

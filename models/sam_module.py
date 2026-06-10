@@ -41,22 +41,31 @@ def _double_conv(in_ch: int, out_ch: int) -> nn.Sequential:
 
 class ImageUNetDecoder(nn.Module):
     """
-    U-Net over the raw SAR image, conditioned on CLIP patch tokens at the
-    bottleneck.
+    Text-guided U-Net over the raw SAR image (reasoning-segmentation decoder).
 
-    Why this exists: the `_scat` masks are fine-grained *texture / backscatter*
-    segmentations (high-scatter vs low-scatter regions that follow the image at
-    pixel scale). The token-only decoder is capped at the 16×16 CLIP patch grid,
-    which is far too coarse to reproduce that detail — it collapses to a constant
-    blob (flat mIoU). A U-Net sees the image at full resolution via skip
-    connections, so it can actually trace the high-scatter boundaries, while the
-    injected CLIP features still provide ice-type semantic context.
+    Why a U-Net: the `_scat` targets are fine-grained *texture / backscatter*
+    maps that follow the image at pixel scale. The token-only decoder is capped
+    at the 16×16 CLIP patch grid, far too coarse for that detail. A U-Net sees
+    the image at full resolution via skip connections.
+
+    How text navigates the segmentation (active when text_dim > 0):
+      1. Bottleneck conditioning — the text-fused visual tokens (already
+         enriched by cross-attention against the per-image description) are
+         injected at the bottleneck via `cond_proj`, alongside CLIP patch tokens.
+      2. FiLM modulation — the sentence embedding of the description produces
+         per-channel scale/shift (γ, β) applied to the bottleneck features, so
+         the description re-weights WHICH features matter for this query.
+      3. Text–pixel similarity — the description embedding is compared (cosine)
+         with every full-resolution decoder pixel; the similarity map is
+         concatenated as an extra channel before the mask head, giving the
+         head an explicit "does this pixel match the text?" signal.
     """
 
     def __init__(self, image_size: Tuple[int, int] = (512, 512),
-                 cond_dim: int = 1024, base: int = 32):
+                 cond_dim: int = 1024, base: int = 32, text_dim: int = 0):
         super().__init__()
         self.image_size = tuple(image_size)
+        self.text_dim = int(text_dim)
 
         self.enc1 = _double_conv(3, base)            # full res
         self.enc2 = _double_conv(base, base * 2)     # /2
@@ -64,8 +73,15 @@ class ImageUNetDecoder(nn.Module):
         self.enc4 = _double_conv(base * 4, base * 8)  # /8  (bottleneck)
         self.pool = nn.MaxPool2d(2)
 
-        # CLIP semantic context injected at the bottleneck
+        # Semantic context (CLIP patch tokens + text-fused tokens) injected at
+        # the bottleneck
         self.cond_proj = nn.Linear(cond_dim, base * 8)
+
+        if self.text_dim > 0:
+            # FiLM: description embedding → per-channel (γ, β) at the bottleneck
+            self.film = nn.Linear(self.text_dim, base * 8 * 2)
+            # Text–pixel similarity head at full resolution
+            self.txt_pix_proj = nn.Linear(self.text_dim, base)
 
         self.up3  = nn.ConvTranspose2d(base * 8, base * 4, 2, 2)
         self.dec3 = _double_conv(base * 8, base * 4)   # concat(up + enc3)
@@ -73,7 +89,8 @@ class ImageUNetDecoder(nn.Module):
         self.dec2 = _double_conv(base * 4, base * 2)
         self.up1  = nn.ConvTranspose2d(base * 2, base, 2, 2)
         self.dec1 = _double_conv(base * 2, base)
-        self.head = nn.Conv2d(base, 1, 1)
+        head_in = base + (1 if self.text_dim > 0 else 0)
+        self.head = nn.Conv2d(head_in, 1, 1)
 
         # Deep supervision: auxiliary mask head at the /4 resolution level.
         # Provides a shorter gradient path to enc3/enc4, which helps the
@@ -90,11 +107,14 @@ class ImageUNetDecoder(nn.Module):
 
     def forward(self, image: torch.Tensor,
                 cond_tokens: Optional[torch.Tensor] = None,
+                text_emb: Optional[torch.Tensor] = None,
                 return_aux: bool = False):
         """
         Args:
             image:       (B, 3, H, W) — preprocessed SAR tensor (full resolution)
-            cond_tokens: (B, N, cond_dim) — CLIP patch tokens (semantic context)
+            cond_tokens: (B, N, cond_dim) — patch + text-fused tokens (semantics)
+            text_emb:    (B, text_dim) — sentence embedding of the description
+                         (required when the decoder was built with text_dim > 0)
             return_aux:  if True, also return the /4-resolution auxiliary logits
                          for deep supervision (only used during training)
 
@@ -116,9 +136,25 @@ class ImageUNetDecoder(nn.Module):
                                  mode="bilinear", align_corners=False)
             e4 = e4 + cond                                       # inject semantics
 
+        if self.text_dim > 0 and text_emb is not None:
+            # FiLM: the description scales/shifts the bottleneck channels
+            gamma, beta = self.film(text_emb).chunk(2, dim=-1)   # (B, 8base) ×2
+            e4 = e4 * (1.0 + gamma.unsqueeze(-1).unsqueeze(-1)) \
+                 + beta.unsqueeze(-1).unsqueeze(-1)
+
         d3 = self.dec3(torch.cat([self._match(self.up3(e4), e3), e3], dim=1))
         d2 = self.dec2(torch.cat([self._match(self.up2(d3), e2), e2], dim=1))
         d1 = self.dec1(torch.cat([self._match(self.up1(d2), e1), e1], dim=1))
+
+        if self.text_dim > 0:
+            if text_emb is not None:
+                # Per-pixel cosine similarity: description vs decoder pixels
+                t = F.normalize(self.txt_pix_proj(text_emb), dim=-1)  # (B, base)
+                p = F.normalize(d1, dim=1)                            # (B, base, H, W)
+                sim = (p * t.unsqueeze(-1).unsqueeze(-1)).sum(dim=1, keepdim=True)
+            else:
+                sim = d1.new_zeros(d1.shape[0], 1, *d1.shape[-2:])
+            d1 = torch.cat([d1, sim], dim=1)                          # (B, base+1, H, W)
         out = self.head(d1)                                     # (B, 1, H, W)
 
         if out.shape[-2:] != self.image_size:

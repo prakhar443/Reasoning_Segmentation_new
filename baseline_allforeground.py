@@ -124,11 +124,35 @@ def collect_split(data_root: Path, split: str):
     return selected
 
 
-def gt_mask_512(img_path: str, mask_path: str) -> np.ndarray:
-    """Published mask pipeline: Otsu on native map -> stretch to image frame
-    -> resize to 512 (nearest, as albumentations does for masks)."""
+def normalize_scat(gray: np.ndarray) -> np.ndarray:
+    """Identical to data/dataset.py::normalize_scat(mode='minmax')."""
+    g = gray.astype(np.float32)
+    lo, hi = float(g.min()), float(g.max())
+    if hi - lo < 1e-6:
+        return np.zeros_like(g)
+    return (g - lo) / (hi - lo)
+
+
+def gt_mask_512(img_path: str, mask_path: str, gt_mode: str = "scat") -> np.ndarray:
+    """
+    gt_mode="scat" (reasoning-seg GT, default): the raw `_scat` map is the
+    ground truth — per-image min-max normalise, bilinear-stretch to the image
+    frame, resize to 512, binarise at 0.5 of the normalised map (the metric
+    threshold used by utils/metrics.py).
+
+    gt_mode="otsu" (legacy): Otsu on the native map -> nearest-stretch to the
+    image frame -> resize to 512.
+    """
     img = Image.open(img_path)
     mask_gray = np.array(Image.open(mask_path).convert("L"))
+    if gt_mode == "scat":
+        soft = normalize_scat(mask_gray)
+        if (soft.shape[1], soft.shape[0]) != img.size:
+            soft = np.array(
+                Image.fromarray(soft, mode="F").resize(img.size, Image.BILINEAR)
+            )
+        soft = cv2.resize(soft, (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_NEAREST)
+        return (soft >= 0.5).astype(np.uint8)
     mask_bin = binarize(mask_gray)
     if (mask_bin.shape[1], mask_bin.shape[0]) != img.size:
         mask_bin = np.array(Image.fromarray(mask_bin).resize(img.size, Image.NEAREST))
@@ -139,15 +163,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_root", default="dataset")
     ap.add_argument("--split", default="test", choices=["train", "val", "test"])
+    ap.add_argument("--gt", default="scat", choices=["scat", "otsu"],
+                    help="Ground-truth definition: 'scat' = raw scattering map "
+                         "binarised at 0.5 of its normalised range (reasoning-seg "
+                         "GT, default); 'otsu' = legacy Otsu-binary masks")
     args = ap.parse_args()
 
     samples = collect_split(Path(args.data_root), args.split)
-    print(f"{args.split} split: {len(samples)} images")
+    print(f"{args.split} split: {len(samples)} images (GT mode: {args.gt})")
 
     fracs, total_fg, total_px = [], 0, 0
     per_class = {c: [] for c in ICE_CLASSES}
     for img_path, mask_path, label in samples:
-        m = gt_mask_512(img_path, mask_path)
+        m = gt_mask_512(img_path, mask_path, gt_mode=args.gt)
         f = float(m.mean())
         fracs.append(f)
         per_class[ICE_CLASSES[label]].append(f)
