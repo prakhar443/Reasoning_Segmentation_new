@@ -259,16 +259,20 @@ class MetricAccumulator:
             self.cum_union += _u
 
             # Reasoning split: per-sample bucketing by is_positive (if provided).
-            # Positive → how well it segments the referred ice (IoU). Negative →
-            # did it correctly stay empty (foreground fraction below 5%)?
+            #   Positive → IoU of the (ungated) mask vs the referred ice.
+            #   Negative → correctly rejected? Prefer the presence head's
+            #     decision (P(present) < 0.5); fall back to mask emptiness.
             is_pos = targets.get("is_positive")
             if is_pos is not None:
+                pres = outputs.get("presence_prob")
                 fg_frac = (masks >= 0.5).float().mean(dim=(1, 2, 3))  # (B,)
                 for b in range(masks.shape[0]):
                     if float(is_pos[b]) >= 0.5:
                         self.pos_ious.append(
                             compute_iou(masks[b:b+1], gt_mask[b:b+1])
                         )
+                    elif pres is not None:
+                        self.neg_reject.append(1.0 if float(pres[b]) < 0.5 else 0.0)
                     else:
                         self.neg_reject.append(1.0 if fg_frac[b].item() < 0.05 else 0.0)
 

@@ -242,6 +242,11 @@ class TrainConfig:
     lambda_mask: float = 2.0            # Focal + Dice for segmentation mask
     lambda_cls: float = 0.5             # CrossEntropy for 6-class head
     lambda_cot: float = 0.05            # attention-map regularisation weight (kept as lambda_cot for checkpoint compatibility)
+    # Presence/reasoning head (reasoning_seg_mode): BCE on "is the queried ice
+    # present?". The mask loss is applied to POSITIVE samples only, so the
+    # decoder always learns to localise and never collapses to all-empty; the
+    # presence head learns the accept/reject decision instead.
+    lambda_presence: float = 1.0
     dice_smooth: float = 1e-4
     lambda_aux: float = 0.2             # ↓ from 0.4: aux was running ≥1.0 and driving overflow
     grad_clip_norm: float = 1.0         # global grad-norm clip (0.5 starved the U-Net)

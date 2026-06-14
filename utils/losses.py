@@ -293,6 +293,7 @@ class SeaIceLoss(nn.Module):
         self.lambda_cls = train_cfg.lambda_cls
         self.lambda_cot = train_cfg.lambda_cot
         self.lambda_aux = getattr(train_cfg, "lambda_aux", 0.4)
+        self.lambda_presence = getattr(train_cfg, "lambda_presence", 1.0)
 
     def forward(
         self,
@@ -316,6 +317,7 @@ class SeaIceLoss(nn.Module):
 
         gt_mask = targets["mask"]
         gt_label = targets["label"]
+        is_pos = targets.get("is_positive")  # (B,) float in {0,1} or None
 
         # Resize prediction to match GT mask size (in case they differ)
         if mask_logits.shape[-2:] != gt_mask.shape[-2:]:
@@ -324,25 +326,46 @@ class SeaIceLoss(nn.Module):
                 mode="bilinear", align_corners=False
             )
 
-        l_mask = self.mask_loss(mask_logits, gt_mask)
+        # ── Mask loss on POSITIVE samples only ────────────────────────────────
+        # On negatives the target is empty; including them lets the trivial
+        # "predict empty everywhere" solution dominate and the decoder collapses
+        # (pos_mIoU → 0). The presence head (below) handles negatives instead, so
+        # the decoder only ever learns to localise the referred ice.
+        if is_pos is not None:
+            pos = is_pos.to(mask_logits.device).view(-1) > 0.5
+        else:
+            pos = torch.ones(mask_logits.shape[0], dtype=torch.bool,
+                             device=mask_logits.device)
+
+        if pos.any():
+            l_mask = self.mask_loss(mask_logits[pos], gt_mask[pos])
+        else:
+            l_mask = mask_logits.sum() * 0.0  # no positives in this batch
+
         l_cls = self.cls_loss(cls_logits_tc, gt_label)
-        l_attn = self.attn_loss(attn, gt_mask)
+        l_attn = self.attn_loss(attn[pos], gt_mask[pos]) if pos.any() \
+            else mask_logits.sum() * 0.0
 
         total = (self.lambda_mask * l_mask
                  + self.lambda_cls  * l_cls
                  + self.lambda_cot  * l_attn)
 
-        # Deep supervision: aux mask head at 1/4 resolution
+        # ── Presence / reasoning loss (BCE on "is the queried ice present?") ──
+        l_pres = mask_logits.new_tensor(0.0)
+        if outputs.get("presence_logits") is not None and is_pos is not None:
+            l_pres = F.binary_cross_entropy_with_logits(
+                outputs["presence_logits"].view(-1),
+                is_pos.to(mask_logits.device).view(-1).float(),
+            )
+            total = total + self.lambda_presence * l_pres
+
+        # Deep supervision: aux mask head at 1/4 resolution (positives only)
         l_aux = mask_logits.new_tensor(0.0)
-        if "aux_logits" in outputs and outputs["aux_logits"] is not None:
-            aux_logits = outputs["aux_logits"]
+        if "aux_logits" in outputs and outputs["aux_logits"] is not None and pos.any():
+            aux_logits = outputs["aux_logits"][pos]
             # Clamp before loss: aux_head is a bare Conv2d with no normalisation.
-            # In FP16, its logits can grow to ≥65504 after several epochs, causing
-            # FocalLoss backward to produce Inf gradients → NaN weights. BF16 has
-            # FP32's exponent range so this guard is belt-and-suspenders, but it also
-            # prevents pathologically large aux losses from dominating the gradient.
             aux_logits = aux_logits.clamp(-10.0, 10.0)
-            gt_mask_ds = F.interpolate(gt_mask, size=aux_logits.shape[-2:],
+            gt_mask_ds = F.interpolate(gt_mask[pos], size=aux_logits.shape[-2:],
                                        mode="bilinear", align_corners=False)
             l_aux = self.mask_loss(aux_logits, gt_mask_ds)
             total = total + self.lambda_aux * self.lambda_mask * l_aux
@@ -353,4 +376,5 @@ class SeaIceLoss(nn.Module):
             "loss_cls": l_cls,
             "loss_attn": l_attn,
             "loss_aux": l_aux,
+            "loss_presence": l_pres,
         }

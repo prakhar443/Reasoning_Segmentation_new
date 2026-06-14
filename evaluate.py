@@ -292,9 +292,11 @@ def evaluate(
 
             # Update metrics
             _isp = batch.get("is_positive")
+            _pres = outputs.get("presence_prob")
             seg_metrics.update(
                 outputs={
                     "masks": outputs["masks"],
+                    "presence_prob": (_pres[0:1] if _pres is not None else None),
                 },
                 targets={"mask": batch["mask"][0].unsqueeze(0),
                          "is_positive": (_isp[0].unsqueeze(0) if _isp is not None else None)},

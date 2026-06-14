@@ -102,6 +102,18 @@ class SeaIceSegmentationPipeline(nn.Module):
         print("[7/8] Building ice type classification head...")
         self.classifier = IceTypeClassifier(model_cfg)
 
+        # ── Presence head (reasoning / rejection) ─────────────────────────────
+        # Decides whether the (indirect) query's target actually exists in this
+        # image, from [CLS image token ‖ query sentence embedding]. This carries
+        # the reasoning decision in reasoning_seg_mode, so the mask decoder can
+        # train on positives only and never collapses to "predict empty".
+        pres_in = model_cfg.clip_hidden_dim + model_cfg.fusion_dim
+        self.presence_head = nn.Sequential(
+            nn.LayerNorm(pres_in),
+            nn.Linear(pres_in, 256), nn.GELU(), nn.Dropout(0.2),
+            nn.Linear(256, 1),
+        )
+
         # ── Module 8: Temporal consistency ────────────────────────────────────
         print("[8/8] Building temporal consistency module...")
         self.temporal = TemporalConsistencyModule(model_cfg)
@@ -272,10 +284,25 @@ class SeaIceSegmentationPipeline(nn.Module):
         # ── Final predictions ─────────────────────────────────────────────────
         pred_idx, pred_probs, pred_names = self.classifier.predict(cls_logits_tc)
 
+        # ── Presence / reasoning head ─────────────────────────────────────────
+        # "Does the queried (indirect) ice type exist in this image?" From the
+        # image CLS token + the query sentence embedding. masks_gated is the
+        # production output: the localised mask, suppressed when the query does
+        # not match the image (presence < 0.5).
+        presence_logits = self.presence_head(
+            torch.cat([cls_token, sent_emb], dim=-1)
+        ).squeeze(-1)                                       # (B,)
+        presence_prob = torch.sigmoid(presence_logits)      # (B,)
+        gate = (presence_prob >= 0.5).float().view(B, 1, 1, 1)
+        masks_gated = masks_hw * gate
+
         return {
-            "mask_logits": mask_logits,          # (B, 1, H, W)
+            "mask_logits": mask_logits,          # (B, 1, H, W) — raw (loss: positives only)
             "aux_logits": aux_logits,             # (B, 1, H/4, W/4) or None
-            "masks": masks_hw,                    # (B, 1, H, W) — sigmoid applied
+            "masks": masks_hw,                    # (B, 1, H, W) — ungated localisation
+            "masks_gated": masks_gated,           # (B, 1, H, W) — gated by presence (production)
+            "presence_logits": presence_logits,   # (B,) — reasoning logit
+            "presence_prob": presence_prob,       # (B,) — P(queried ice is present)
             "cls_logits": cls_logits,             # (B, 6) — pre-temporal
             "cls_logits_tc": cls_logits_tc,       # (B, 6) — post-temporal smoothing
             "attn_weights": combined_attn,        # (B, N)
@@ -311,7 +338,8 @@ class SeaIceSegmentationPipeline(nn.Module):
         train_cfg = train_cfg or default_cfg.train
 
         lora_params = list(self.visual_encoder.get_trainable_params())
-        cls_params = list(self.classifier.parameters())
+        # presence head trains with the classification head's LR
+        cls_params = list(self.classifier.parameters()) + list(self.presence_head.parameters())
         temporal_params = list(self.temporal.parameters())
         reasoning_params = [
             p for p in self.reasoning_module.parameters() if p.requires_grad

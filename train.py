@@ -146,7 +146,8 @@ def train_step(
         )
         loss_dict = criterion(
             outputs=outputs,
-            targets={"mask": masks, "label": labels},
+            targets={"mask": masks, "label": labels,
+                     "is_positive": batch["is_positive"].to(device)},
         )
         loss = loss_dict["loss"]
 
@@ -208,7 +209,8 @@ def validate(
             images_np=images_np,
             sequence_ids=seq_ids,
         )
-        loss_dict = criterion(outputs, {"mask": masks, "label": labels})
+        loss_dict = criterion(outputs, {"mask": masks, "label": labels,
+                                        "is_positive": batch["is_positive"].to(device)})
 
         metrics.update(
             outputs=outputs,
