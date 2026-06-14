@@ -186,6 +186,14 @@ class ModelConfig:
     cls_dropout: float = 0.30            # ↑ from 0.10
     num_classes: int = len(ICE_CLASSES)
 
+    # HONEST classification: when True the classifier sees ONLY image-derived
+    # features (mask-pooled CLIP patch tokens ‖ CLIP CLS token) — never the
+    # description. This stops the 6-class F1 from trivially hitting 1.0 by
+    # reading the class out of the text. The description still navigates
+    # segmentation via the decoder. Set False to reproduce the leaky fused-text
+    # classifier (ablation only).
+    cls_image_only: bool = True
+
     # ── Temporal consistency ──────────────────────────────────────────────────
     memory_bank_size: int = 5
     temporal_sim_threshold: float = 0.65

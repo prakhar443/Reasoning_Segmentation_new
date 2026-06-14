@@ -251,7 +251,14 @@ class SeaIceSegmentationPipeline(nn.Module):
         # masks_hw → mask_logits was fighting the mask signal and preventing
         # the U-Net from breaking out of the all-foreground plateau.
         masks_hw_d = masks_hw.detach()
-        cls_logits = self.classifier(fused_tokens, masks_hw_d, sent_emb)
+        # HONEST classification: feed image-only features (CLIP patch tokens ‖
+        # CLS token) so the 6-class head cannot read the answer from the
+        # description. The text still drives segmentation via the decoder.
+        # cls_image_only=False reverts to the leaky text-fused inputs.
+        if getattr(self.classifier, "image_only", True):
+            cls_logits = self.classifier(patch_tokens, masks_hw_d, cls_token)
+        else:
+            cls_logits = self.classifier(fused_tokens, masks_hw_d, sent_emb)
         # cls_logits: (B, 6)
 
         # ── Step 8: Temporal consistency ──────────────────────────────────────
