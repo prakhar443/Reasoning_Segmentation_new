@@ -137,8 +137,13 @@ class ImageUNetDecoder(nn.Module):
             e4 = e4 + cond                                       # inject semantics
 
         if self.text_dim > 0 and text_emb is not None:
-            # FiLM: the description scales/shifts the bottleneck channels
+            # FiLM: the description scales/shifts the bottleneck channels.
+            # tanh bounds the modulation so the scale stays in [0, 2] and the
+            # shift in [-1, 1] — this keeps activations finite (an unbounded
+            # Linear here could blow e4 past the fp16 range and NaN the run).
             gamma, beta = self.film(text_emb).chunk(2, dim=-1)   # (B, 8base) ×2
+            gamma = torch.tanh(gamma)
+            beta = torch.tanh(beta)
             e4 = e4 * (1.0 + gamma.unsqueeze(-1).unsqueeze(-1)) \
                  + beta.unsqueeze(-1).unsqueeze(-1)
 
@@ -148,9 +153,11 @@ class ImageUNetDecoder(nn.Module):
 
         if self.text_dim > 0:
             if text_emb is not None:
-                # Per-pixel cosine similarity: description vs decoder pixels
-                t = F.normalize(self.txt_pix_proj(text_emb), dim=-1)  # (B, base)
-                p = F.normalize(d1, dim=1)                            # (B, base, H, W)
+                # Per-pixel cosine similarity: description vs decoder pixels.
+                # eps=1e-4 keeps the normalisation stable for near-zero vectors
+                # (a tiny default eps underflows in low precision → NaN).
+                t = F.normalize(self.txt_pix_proj(text_emb), dim=-1, eps=1e-4)  # (B, base)
+                p = F.normalize(d1, dim=1, eps=1e-4)                            # (B, base, H, W)
                 sim = (p * t.unsqueeze(-1).unsqueeze(-1)).sum(dim=1, keepdim=True)
             else:
                 sim = d1.new_zeros(d1.shape[0], 1, *d1.shape[-2:])

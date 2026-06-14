@@ -115,6 +115,7 @@ def train_step(
     scaler: Optional[GradScaler],
     device: str,
     use_amp: bool,
+    amp_dtype: torch.dtype = torch.float16,
 ) -> Dict:
     """Single training step."""
     images = batch["image"].to(device)              # (B, 3, H, W)
@@ -135,7 +136,7 @@ def train_step(
     seq_ids = [str(Path(p).parent.parent.name) for p in batch["image_path"]]
 
     # Forward pass — request aux logits for deep supervision during training
-    with autocast('cuda', enabled=use_amp):
+    with autocast('cuda', dtype=amp_dtype, enabled=use_amp):
         outputs = model(
             images=images,
             descriptions=descriptions,
@@ -245,6 +246,8 @@ def train(
     epochs = train_cfg.epochs
     grad_accum = train_cfg.grad_accum_steps
     use_amp = train_cfg.fp16 or train_cfg.bf16
+    # bf16 takes precedence (no GradScaler, no overflow); else fp16.
+    amp_dtype = torch.bfloat16 if getattr(train_cfg, "bf16", False) else torch.float16
     patience = getattr(train_cfg, "early_stop_patience", 6)
     clip_norm = getattr(train_cfg, "grad_clip_norm", 1.0)
 
@@ -263,7 +266,7 @@ def train(
 
         for batch_idx, batch in enumerate(pbar):
             step_result = train_step(
-                model, batch, criterion, optimizer, scaler, device, use_amp
+                model, batch, criterion, optimizer, scaler, device, use_amp, amp_dtype
             )
 
             # NaN batch: gradients are already zeroed inside train_step
@@ -469,9 +472,17 @@ def main():
     total_steps = steps_per_epoch * cfg.train.epochs
     scheduler = get_lr_scheduler(optimizer, cfg.train, total_steps)
 
-    # Mixed precision scaler
+    # Mixed precision. Prefer bf16 (no overflow); fall back to fp16 on GPUs
+    # without bf16 support (e.g. T4). A GradScaler is only needed for fp16.
+    if cfg.train.bf16 and not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
+        print("bf16 not supported on this GPU — falling back to fp16")
+        cfg.train.bf16 = False
+        cfg.train.fp16 = True
+    amp_mode = "bf16" if cfg.train.bf16 else ("fp16" if cfg.train.fp16 else "fp32")
+    print(f"Mixed precision: {amp_mode}")
+
     scaler = None
-    if cfg.train.fp16:
+    if cfg.train.fp16 and not cfg.train.bf16:
         scaler = GradScaler('cuda')
 
     # Loss

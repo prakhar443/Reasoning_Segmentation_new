@@ -246,9 +246,13 @@ class TrainConfig:
     soft_tversky_weight: float = 1.0
     soft_l1_weight: float = 0.5
 
-    # Mixed precision
-    fp16: bool = True
-    bf16: bool = False
+    # Mixed precision.
+    # bf16 is the default: on A100/L4/H100 it has FP32's exponent range, so the
+    # text-guided decoder (FiLM + cosine similarity) cannot overflow to Inf/NaN
+    # the way fp16 does. train.py auto-falls back to fp16 on GPUs without bf16
+    # (e.g. T4). Do NOT set both — bf16 takes precedence and needs no GradScaler.
+    fp16: bool = False
+    bf16: bool = True
 
     # Early stopping on val mIoU. Raised to 12 because mask alignment was the
     # blocker until epoch 13 of the prior run; F1 was still trending up at stop.
