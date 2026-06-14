@@ -291,11 +291,13 @@ def evaluate(
             all_detailed[fname] = res
 
             # Update metrics
+            _isp = batch.get("is_positive")
             seg_metrics.update(
                 outputs={
                     "masks": outputs["masks"],
                 },
-                targets={"mask": batch["mask"][0].unsqueeze(0)},
+                targets={"mask": batch["mask"][0].unsqueeze(0),
+                         "is_positive": (_isp[0].unsqueeze(0) if _isp is not None else None)},
                 loss=None,
             )
             cls_metrics.update(
@@ -347,6 +349,12 @@ def evaluate(
     print(f"  mIoU:         {seg_results['mean_iou']:.4f}")
     print(f"  Dice:         {seg_results['mean_dice']:.4f}")
     print(f"  Pixel Acc:    {seg_results['pixel_accuracy']:.4f}")
+
+    if "reasoning_score" in seg_results:
+        print("\n[REASONING-SEGMENTATION METRICS]")
+        print(f"  pos mIoU (segment the referred ice): {seg_results['pos_miou']:.4f}")
+        print(f"  neg reject (empty on wrong query)  : {seg_results['neg_reject']:.4f}")
+        print(f"  reasoning_score (balanced)         : {seg_results['reasoning_score']:.4f}")
 
     print("\n[CLASSIFICATION METRICS]")
     print(f"  Accuracy:     {cls_results['accuracy']:.4f}")

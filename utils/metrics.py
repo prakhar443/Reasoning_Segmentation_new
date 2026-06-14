@@ -215,6 +215,10 @@ class MetricAccumulator:
         self.cum_inter: float = 0.0
         self.cum_union: float = 0.0
         self.losses: List[float] = []
+        # Reasoning-segmentation split: IoU on positive (matching) queries, and
+        # whether negative (non-matching) queries are correctly rejected (empty).
+        self.pos_ious: List[float] = []
+        self.neg_reject: List[float] = []
 
     def reset(self):
         self.cls_metrics.reset()
@@ -227,6 +231,8 @@ class MetricAccumulator:
         self.cum_inter = 0.0
         self.cum_union = 0.0
         self.losses.clear()
+        self.pos_ious.clear()
+        self.neg_reject.clear()
 
     def update(
         self,
@@ -252,6 +258,20 @@ class MetricAccumulator:
             self.cum_inter += _i
             self.cum_union += _u
 
+            # Reasoning split: per-sample bucketing by is_positive (if provided).
+            # Positive → how well it segments the referred ice (IoU). Negative →
+            # did it correctly stay empty (foreground fraction below 5%)?
+            is_pos = targets.get("is_positive")
+            if is_pos is not None:
+                fg_frac = (masks >= 0.5).float().mean(dim=(1, 2, 3))  # (B,)
+                for b in range(masks.shape[0]):
+                    if float(is_pos[b]) >= 0.5:
+                        self.pos_ious.append(
+                            compute_iou(masks[b:b+1], gt_mask[b:b+1])
+                        )
+                    else:
+                        self.neg_reject.append(1.0 if fg_frac[b].item() < 0.05 else 0.0)
+
         # Classification
         pred_idx = outputs.get("pred_class_idx")
         gt_label = targets.get("label")
@@ -265,8 +285,26 @@ class MetricAccumulator:
         cls = self.cls_metrics.compute()
         # gIoU = mean per-image IoU (== mean_iou here); cIoU = cumulative
         ciou = (self.cum_inter / self.cum_union) if self.cum_union > 0 else 0.0
+
+        # Reasoning-segmentation honest metrics:
+        #   pos_miou    — mIoU over POSITIVE queries only (segment the right ice)
+        #   neg_reject  — fraction of NEGATIVE queries correctly left empty
+        #   reasoning_score — balanced mean of the two (the metric to optimise;
+        #                     ordinary mean_iou is inflated by empty/empty=1 on
+        #                     negatives, so it is NOT used for model selection)
+        has_pos = len(self.pos_ious) > 0
+        has_neg = len(self.neg_reject) > 0
+        pos_miou = float(np.mean(self.pos_ious)) if has_pos else (
+            float(np.mean(self.seg_ious)) if self.seg_ious else 0.0)
+        neg_reject = float(np.mean(self.neg_reject)) if has_neg else 1.0
+        reasoning_score = (0.5 * (pos_miou + neg_reject)
+                           if (has_pos and has_neg) else pos_miou)
+
         return {
             "mean_iou": float(np.mean(self.seg_ious)) if self.seg_ious else 0.0,
+            "pos_miou": pos_miou,
+            "neg_reject": neg_reject,
+            "reasoning_score": reasoning_score,
             "giou": float(np.mean(self.seg_ious)) if self.seg_ious else 0.0,
             "ciou": float(ciou),
             "boundary_iou": float(np.mean(self.seg_biou)) if self.seg_biou else 0.0,

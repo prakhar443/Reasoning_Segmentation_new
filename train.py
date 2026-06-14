@@ -212,7 +212,8 @@ def validate(
 
         metrics.update(
             outputs=outputs,
-            targets={"mask": masks, "label": labels},
+            targets={"mask": masks, "label": labels,
+                     "is_positive": batch.get("is_positive")},
             loss=loss_dict["loss"].item(),
         )
 
@@ -294,6 +295,7 @@ def train(
                 targets={
                     "mask": batch["mask"].to(device),
                     "label": batch["label"].to(device),
+                    "is_positive": batch.get("is_positive"),
                 },
                 loss=step_result["loss"],
             )
@@ -320,15 +322,21 @@ def train(
             # Validation
             if global_step % train_cfg.eval_every == 0 and global_step > 0:
                 val_metrics = validate(model, val_loader, criterion, device)
-                val_iou = val_metrics["mean_iou"]
+                # In reasoning mode, select on reasoning_score (balances segmenting
+                # the right ice on positive queries vs. staying empty on negatives);
+                # plain mean_iou is inflated by empty/empty=1 on negatives.
+                val_iou = val_metrics.get("reasoning_score", val_metrics["mean_iou"])
                 val_f1  = val_metrics["weighted_f1"]
 
                 print(f"\n{'='*60}")
                 print(f"Validation @ step {global_step}")
                 print(val_metrics.get("classification_report", ""))
-                print(f"mIoU: {val_iou:.4f} (best={best_miou:.4f}) | "
+                print(f"reasoning_score: {val_iou:.4f} (best={best_miou:.4f}) | "
+                      f"pos_mIoU: {val_metrics.get('pos_miou', 0.0):.4f} | "
+                      f"neg_reject: {val_metrics.get('neg_reject', 0.0):.4f}")
+                print(f"plain_mIoU: {val_metrics['mean_iou']:.4f} | "
                       f"F1: {val_f1:.4f} (best={best_f1:.4f})")
-                print(f"No-improve count (mIoU): {no_improve_count}/{patience}")
+                print(f"No-improve count: {no_improve_count}/{patience}")
                 print(f"{'='*60}\n")
 
                 if wandb_run:
@@ -354,7 +362,7 @@ def train(
                         epoch, global_step, best_miou,
                         output_dir / "best_model.pth",
                     )
-                    print(f"  ✓ New best mIoU={val_iou:.4f} (F1 here={val_f1:.4f})")
+                    print(f"  ✓ New best reasoning_score={val_iou:.4f} (F1 here={val_f1:.4f})")
                 else:
                     no_improve_count += 1
                     if no_improve_count >= patience:

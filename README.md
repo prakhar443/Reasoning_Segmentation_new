@@ -1,9 +1,33 @@
 # Sea Ice SAR: Reasoning Segmentation & Ice-Type Classification
 
-Reasoning-segmentation pipeline for **joint** pixel-level sea-ice segmentation
-and six-class ice-type classification from single-band SAR imagery, where the
-**text and the image jointly navigate the segmentation**: each image's
-annotator description conditions the mask decoder, not just the classifier.
+Reasoning-segmentation pipeline for sea-ice SAR: you give an **indirect,
+property-based instruction** that names an ice type only by its
+characteristics — *"segment the land ice that formed from compressed snow over
+centuries and flows downhill"* → **glaciers** — and the model reasons what is
+meant and segments the matching ice, or **nothing** if that ice is not in the
+image. (The sea-ice analogue of *"segment the fruit with the most vitamin C"*
+→ the orange.) It also predicts the six-class ice type from the image.
+
+### Reasoning-segmentation mode (`reasoning_seg_mode=True`, default)
+
+The text input is an indirect query from `data/reasoning_queries.py` (six
+property-based phrasings per ice type, never naming the class). Each training
+sample is randomly:
+
+- **positive** — the query matches the image's ice type → target = the raw
+  `_scat` mask, or
+- **negative** (`reasoning_negative_ratio`, default 0.5) — the query describes
+  a *different* ice type → target = an **empty** mask.
+
+The negatives are what force the instruction to be understood: the model
+cannot just segment the salient blob, it must decide whether the *described*
+ice is present. Honest metrics (`utils/metrics.py`): **`pos_miou`** (segment
+the right ice on matching queries), **`neg_reject`** (stay empty on
+non-matching queries), and **`reasoning_score`** = their mean (the selection /
+reporting metric — plain mIoU is inflated by empty/empty=1 on negatives).
+
+> Set `reasoning_seg_mode=False` to fall back to the free-text-description
+> channel (the annotator descriptions in `dataset/*/descriptions/`).
 
 ## What the model is
 

@@ -71,11 +71,22 @@ class DataConfig:
     # fraction ~0.32). Keep "stretch" unless image and mask share an aspect ratio.
     mask_resize_mode: str = "stretch"    # "stretch" (aligned) | "letterbox"
 
-    # ── Reasoning-segmentation text channel ───────────────────────────────────
-    # When True, the per-image annotator descriptions (dataset/*/descriptions/)
-    # are fed to the model and *navigate* segmentation: the text conditions the
-    # mask decoder, not just the classifier. This is the reasoning-segmentation
-    # configuration.
+    # ── True reasoning-segmentation mode (indirect-instruction → mask) ─────────
+    # When True the text input is an INDIRECT, property-based query that names
+    # an ice type only by its characteristics (see data/reasoning_queries.py),
+    # e.g. "segment the land ice that formed from compressed snow and flows
+    # downhill" → glaciers. Crucially, each sample is randomly made POSITIVE
+    # (query matches the image's ice type → target = scat mask) or NEGATIVE
+    # (query describes a DIFFERENT type → target = empty mask). The model must
+    # reason whether the described ice is present and segment it only when it
+    # is — this is what makes the instruction causally drive the output.
+    reasoning_seg_mode: bool = True
+    # Fraction of samples given a non-matching (negative) query → empty target.
+    reasoning_negative_ratio: float = 0.5
+
+    # ── Per-image annotator descriptions (legacy text channel) ─────────────────
+    # Only used when reasoning_seg_mode is False: feeds the dataset's free-text
+    # descriptions (dataset/*/descriptions/) as the segmentation query.
     use_image_descriptions: bool = True
 
     # When True, ice-class names ("glacier", "iceberg", ...) are scrubbed from

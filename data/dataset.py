@@ -38,6 +38,7 @@ from albumentations.pytorch import ToTensorV2
 
 from config import ICE_CLASS_TO_IDX, ICE_CLASSES, cfg
 from data.preprocessing import SARPreprocessor
+from data.reasoning_queries import REASONING_QUERIES
 
 
 # ─── Albumentations version detection ────────────────────────────────────────
@@ -480,13 +481,36 @@ class SeaIceDataset(Dataset):
         # ── Mask tensor ────────────────────────────────────────────────────────
         mask_tensor = torch.from_numpy(mask_np.astype(np.float32)).unsqueeze(0)
 
+        # ── Reasoning-segmentation: indirect query + positive/negative target ──
+        short_desc = sample["short_desc"]
+        long_desc = sample["long_desc"]
+        is_positive = 1.0
+        if getattr(self.data_cfg, "reasoning_seg_mode", False):
+            ice_class = sample["ice_class"]
+            neg_ratio = getattr(self.data_cfg, "reasoning_negative_ratio", 0.5)
+            # Train: vary positive/negative every epoch (global RNG). Val/test:
+            # deterministic per-sample assignment for reproducible metrics.
+            rng = random if self.split == "train" else random.Random(self.data_cfg.seed + idx)
+            if rng.random() >= neg_ratio:
+                # POSITIVE: query describes the image's true ice type → keep mask
+                query = rng.choice(REASONING_QUERIES[ice_class])
+                is_positive = 1.0
+            else:
+                # NEGATIVE: query describes a DIFFERENT type → empty target
+                other = rng.choice([c for c in ICE_CLASSES if c != ice_class])
+                query = rng.choice(REASONING_QUERIES[other])
+                mask_tensor = torch.zeros_like(mask_tensor)
+                is_positive = 0.0
+            short_desc = long_desc = query
+
         return {
             "image": img_tensor,              # (3, H, W)
             "mask": mask_tensor,              # (1, H, W)
             "label": torch.tensor(sample["label"], dtype=torch.long),
-            "short_desc": sample["short_desc"],
-            "long_desc": sample["long_desc"],
+            "short_desc": short_desc,
+            "long_desc": long_desc,
             "image_path": sample["image_path"],
+            "is_positive": torch.tensor(is_positive, dtype=torch.float32),
         }
 
     def get_class_weights_for_sampler(self) -> torch.Tensor:
@@ -561,4 +585,5 @@ def collate_fn(batch: List[Dict]) -> Dict:
         "short_desc": [b["short_desc"] for b in batch],
         "long_desc": [b["long_desc"] for b in batch],
         "image_path": [b["image_path"] for b in batch],
+        "is_positive": torch.stack([b["is_positive"] for b in batch]),
     }
