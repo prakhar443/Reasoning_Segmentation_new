@@ -15,7 +15,7 @@ Two input regimes (selected by model_cfg.cls_image_only):
     visual tokens ‖ sentence embedding. Reproduces the leaky behaviour.
 
 Architecture:
-  [masked_pool(visual_tokens) ‖ global_vec] → LayerNorm → MLP → 6-class logits
+  [pool(visual_tokens) ‖ global_vec] → LayerNorm → MLP → 6-class logits
 """
 
 import torch
@@ -35,7 +35,7 @@ class IceTypeClassifier(nn.Module):
 
         self.image_only = getattr(model_cfg, "cls_image_only", True)
         if self.image_only:
-            # mask-pooled CLIP patch tokens ‖ CLIP CLS token (both image-only)
+            # global-pooled CLIP patch tokens ‖ CLIP CLS token (both image-only)
             visual_dim = model_cfg.clip_hidden_dim   # 1024
             global_dim = model_cfg.clip_hidden_dim   # 1024
         else:
@@ -67,19 +67,26 @@ class IceTypeClassifier(nn.Module):
             logits (B, num_classes)
         """
         B, N, D = visual_tokens.shape
-        side = int(N ** 0.5)
 
-        # ── Pool visual tokens inside the mask region ──────────────────────────
-        mask_small = F.adaptive_avg_pool2d(masks, (side, side))  # (B, 1, side, side)
-        mask_flat = mask_small.view(B, 1, N)                      # (B, 1, N)
-        mask_weight = mask_flat / (mask_flat.sum(dim=-1, keepdim=True) + 1e-8)
-        visual_pool = (visual_tokens * mask_weight.permute(0, 2, 1)).sum(dim=1)  # (B, D)
+        # ── Pool visual tokens ───────────────────────────────────────────
+        if self.image_only:
+            # Mask-INDEPENDENT global pooling. The predicted mask is query-
+            # dependent and noisy (especially for non-matching queries), so
+            # pooling inside it injects noise into classification. Global mean
+            # over patch tokens gives a stable, query-independent image summary.
+            visual_pool = visual_tokens.mean(dim=1)                   # (B, D)
+        else:
+            side = int(N ** 0.5)
+            mask_small = F.adaptive_avg_pool2d(masks, (side, side))   # (B,1,side,side)
+            mask_flat = mask_small.view(B, 1, N)
+            mask_weight = mask_flat / (mask_flat.sum(dim=-1, keepdim=True) + 1e-8)
+            visual_pool = (visual_tokens * mask_weight.permute(0, 2, 1)).sum(dim=1)
 
-        # ── Concatenate with the global image/text vector ─────────────────────
+        # ── Concatenate with the global image/text vector ───────────────────
         combined = torch.cat([visual_pool, global_vec], dim=-1)
         combined = self.norm(combined)
 
-        # ── Classify ──────────────────────────────────────────────────────────
+        # ── Classify ───────────────────────────────────────────────
         logits = self.mlp(combined)    # (B, num_classes)
         # Clamp prevents FP16 overflow (max finite: 65504) from poisoning the
         # temporal memory bank and turning cls_loss into NaN.
