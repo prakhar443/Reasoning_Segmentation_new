@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 import torch
 
 
-# ─── Ice class definitions ────────────────────────────────────────────────────
+# ─── Ice class definitions ──────────────────────────────────────────
 # Names must exactly match the subdirectory names inside dataset/
 
 ICE_CLASSES = [
@@ -27,7 +27,7 @@ IDX_TO_ICE_CLASS = {i: cls for cls, i in ICE_CLASS_TO_IDX.items()}
 ICE_CLASS_WEIGHTS = [1.0, 1.0, 1.5, 1.5, 1.5, 1.0]
 
 
-# ─── Dataset config ───────────────────────────────────────────────────────────
+# ─── Dataset config ───────────────────────────────────────────────
 
 @dataclass
 class DataConfig:
@@ -48,7 +48,7 @@ class DataConfig:
     image_mean: Tuple[float, ...] = (0.485, 0.456, 0.406)
     image_std: Tuple[float, ...] = (0.229, 0.224, 0.225)
 
-    # ── Ground-truth definition ───────────────────────────────────────────────
+    # ── Ground-truth definition ────────────────────────────────────
     # "soft_scat" (REASONING-SEG MODEL, default) — the raw `_scat` scattering
     #   maps ARE the ground truth. Each map is per-image min-max normalised to
     #   [0, 1] and used as a continuous (soft) target; no Otsu binarisation.
@@ -62,7 +62,7 @@ class DataConfig:
 
     # Mask handling for the LEGACY binary mode only.
     mask_binarize: str = "otsu"          # "otsu" | "mean" | "fixed"
-    # Images are 256×256 (square); the `_scat` masks are ~138×187 (portrait).
+    # Images are 256x256 (square); the `_scat` masks are ~138x187 (portrait).
     # They cover the SAME scene at different sampling resolutions, so the mask
     # must be resized to the image's extent ("stretch") to stay spatially
     # aligned. "letterbox" pads image and mask independently — because their
@@ -82,9 +82,9 @@ class DataConfig:
     # is — this is what makes the instruction causally drive the output.
     reasoning_seg_mode: bool = True
     # Fraction of samples given a non-matching (negative) query → empty target.
-    reasoning_negative_ratio: float = 0.5
+    reasoning_negative_ratio: float = 0.4
 
-    # ── Per-image annotator descriptions (legacy text channel) ─────────────────
+    # ── Per-image annotator descriptions (legacy text channel) ───────────────
     # Only used when reasoning_seg_mode is False: feeds the dataset's free-text
     # descriptions (dataset/*/descriptions/) as the segmentation query.
     use_image_descriptions: bool = True
@@ -115,7 +115,7 @@ class DataConfig:
     dual_pol: bool = False               # True if HH+HV available
 
 
-# ─── Model config ─────────────────────────────────────────────────────────────
+# ─── Model config ────────────────────────────────────────────────
 #
 # PUBLISHED MODEL CONFIGURATION (the 5-module pipeline reported in the paper):
 #   - clip_model + LoRA            → visual encoder            [CLAIMED]
@@ -129,27 +129,27 @@ class DataConfig:
 # *alternatives we evaluated and excluded* (see DOCUMENTATION/PAPER_SCOPE.md and
 # CODE_MAP.md) — they are retained for ablation reproducibility, not claimed as
 # contributions, and are OFF by default.
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 @dataclass
 class ModelConfig:
-    # ── Visual Encoder (CLIP + LoRA) ──────────────────────────────────────────
+    # ── Visual Encoder (CLIP + LoRA) ──────────────────────────────────
     clip_model: str = "openai/clip-vit-large-patch14"
     clip_freeze: bool = True             # freeze base weights; only LoRA trains
     lora_rank: int = 8
     lora_alpha: int = 16
-    lora_dropout: float = 0.10           # ↑ from 0.05 — curb overfitting on ~420 imgs
+    lora_dropout: float = 0.10           # up from 0.05 — curb overfitting on ~420 imgs
     lora_target_modules: List[str] = field(
         default_factory=lambda: ["q_proj", "v_proj", "k_proj", "out_proj"]
     )
 
-    # ── DepthAnything V2 ──────────────────────────────────────────────────────
+    # ── DepthAnything V2 ───────────────────────────────────────────
     depth_model: str = "depth-anything/Depth-Anything-V2-Small-hf"
     depth_freeze: bool = True
     depth_feature_dim: int = 256
 
-    # ── Reasoning / fusion module ─────────────────────────────────────────────
-    # PUBLISHED MODEL uses "cross_attn_only" (image↔text cross-attention fusion,
+    # ── Reasoning / fusion module ───────────────────────────────────
+    # PUBLISHED MODEL uses "cross_attn_only" (image<->text cross-attention fusion,
     # no language generation). "blip2"/"llava" are alternative backends that were
     # NOT used in the reported results and do not generate text in this pipeline.
     llm_backend: str = "cross_attn_only" # options: "cross_attn_only" (published), "blip2", "llava"
@@ -158,18 +158,18 @@ class ModelConfig:
     use_short_description: bool = True
     use_long_description: bool = True
 
-    # ── Multimodal fusion dims ────────────────────────────────────────────────
+    # ── Multimodal fusion dims ─────────────────────────────────────
     clip_hidden_dim: int = 1024          # ViT-L/14 output dim
     text_hidden_dim: int = 512
     fusion_dim: int = 768
     num_fusion_heads: int = 8
 
-    # ── SAM ───────────────────────────────────────────────────────────────────
+    # ── SAM ──────────────────────────────────────────────────
     sam_checkpoint: str = "checkpoints/sam_vit_h_4b8939.pth"
     sam_model_type: str = "vit_h"        # options: vit_h, vit_l, vit_b
     sam_freeze: bool = True
 
-    # ── Lightweight (non-SAM) decoder ─────────────────────────────────────────
+    # ── Lightweight (non-SAM) decoder ────────────────────────────────
     # "unet"  — full-resolution U-Net on the SAR image (sharp masks; recommended,
     #           the `_scat` targets are fine texture maps the 16x16 token grid
     #           cannot represent).
@@ -177,41 +177,41 @@ class ModelConfig:
     decoder_type: str = "unet"
     decoder_base_channels: int = 32      # U-Net width; drop to 16 if VRAM-tight
 
-    # ── Reasoning-segmentation decoder conditioning ───────────────────────────
+    # ── Reasoning-segmentation decoder conditioning ──────────────────────
     # When True the U-Net decoder is text-guided: (a) the text-fused visual
     # tokens are injected at the bottleneck alongside the raw CLIP patch
     # tokens, (b) the sentence embedding FiLM-modulates the bottleneck, and
-    # (c) a text–pixel similarity map is concatenated before the mask head.
+    # (c) a text-pixel similarity map is concatenated before the mask head.
     # The text therefore *navigates* the segmentation, not just classification.
     text_guided_decoder: bool = True
 
-    # ── Prompt generator ──────────────────────────────────────────────────────
+    # ── Prompt generator ─────────────────────────────────────────
     attn_threshold: float = 0.70
     max_prompts_per_image: int = 3
     prompt_min_area: int = 500           # min connected component area (pixels)
 
-    # ── 6-class classification head ───────────────────────────────────────────
+    # ── 6-class classification head ──────────────────────────────────
     # Smaller head + heavier dropout: train F1 was hitting 1.0 (pure memorization)
     # while val F1 collapsed — classic over-capacity for a ~420-image dataset.
-    cls_hidden_dim: int = 256            # ↓ from 512
-    cls_dropout: float = 0.30            # ↑ from 0.10
+    cls_hidden_dim: int = 256            # down from 512
+    cls_dropout: float = 0.30            # up from 0.10
     num_classes: int = len(ICE_CLASSES)
 
     # HONEST classification: when True the classifier sees ONLY image-derived
-    # features (mask-pooled CLIP patch tokens ‖ CLIP CLS token) — never the
+    # features (global-pooled CLIP patch tokens ‖ CLIP CLS token) — never the
     # description. This stops the 6-class F1 from trivially hitting 1.0 by
     # reading the class out of the text. The description still navigates
     # segmentation via the decoder. Set False to reproduce the leaky fused-text
     # classifier (ablation only).
     cls_image_only: bool = True
 
-    # ── Temporal consistency ──────────────────────────────────────────────────
+    # ── Temporal consistency ──────────────────────────────────────
     memory_bank_size: int = 5
     temporal_sim_threshold: float = 0.65
     temporal_blend_alpha: float = 0.70   # weight for current prediction
 
 
-# ─── Training config ──────────────────────────────────────────────────────────
+# ─── Training config ──────────────────────────────────────────────
 
 @dataclass
 class TrainConfig:
@@ -226,10 +226,13 @@ class TrainConfig:
     # Optimiser
     optimizer: str = "adamw"
     lr: float = 5e-5
-    lora_lr: float = 2e-4               # LoRA adapters can use higher LR
+    # Peak LRs lowered (LoRA/decoder 2e-4 -> 1e-4): the 2e-4 warmup peak
+    # destabilised the shared encoder around epoch 4 (pos_mIoU regressed
+    # 0.32 -> 0.21 while classification overfit). 1e-4 holds segmentation steady.
+    lora_lr: float = 1e-4
     cls_head_lr: float = 1e-4
-    decoder_lr: float = 2e-4            # lower now that real mask signal exists (was 3e-4)
-    weight_decay: float = 0.05          # ↑ from 0.01 — stronger L2 vs overfitting
+    decoder_lr: float = 1e-4
+    weight_decay: float = 0.05          # up from 0.01 — stronger L2 vs overfitting
     betas: Tuple[float, float] = (0.9, 0.999)
 
     # Scheduler
@@ -248,18 +251,18 @@ class TrainConfig:
     # presence head learns the accept/reject decision instead.
     lambda_presence: float = 1.0
     dice_smooth: float = 1e-4
-    lambda_aux: float = 0.2             # ↓ from 0.4: aux was running ≥1.0 and driving overflow
+    lambda_aux: float = 0.2             # down from 0.4: aux was running >=1.0 and driving overflow
     grad_clip_norm: float = 1.0         # global grad-norm clip (0.5 starved the U-Net)
 
     # Mask-loss shape. An earlier diagnostic run (before this rebalancing)
-    # over-segmented at precision ≈0.42 / recall ≈0.84: the model flooded
-    # foreground to catch every ice pixel. In Tversky = TP/(TP + α·FP + β·FN),
-    # raising α penalises false positives (over-prediction) harder than false
-    # negatives, trading excess recall for precision. α=0.6,β=0.4 is a modest
+    # over-segmented at precision ~0.42 / recall ~0.84: the model flooded
+    # foreground to catch every ice pixel. In Tversky = TP/(TP + a*FP + b*FN),
+    # raising alpha penalises false positives (over-prediction) harder than false
+    # negatives, trading excess recall for precision. a=0.6,b=0.4 is a modest
     # nudge from balanced Dice (0.5/0.5). The published model measured with
     # these settings scores precision 0.444 / recall 0.640 on the test split.
     focal_alpha: float = 0.5
-    tversky_alpha: float = 0.6          # ↑ penalise false positives (curb over-seg)
+    tversky_alpha: float = 0.6          # up: penalise false positives (curb over-seg)
     tversky_beta: float = 0.4
 
     # Soft-target mask loss (mask_target_mode="soft_scat"). The continuous
@@ -296,7 +299,7 @@ class TrainConfig:
     seed: int = 42
 
 
-# ─── Inference config ─────────────────────────────────────────────────────────
+# ─── Inference config ─────────────────────────────────────────────
 
 @dataclass
 class InferenceConfig:
@@ -312,7 +315,7 @@ class InferenceConfig:
     save_json: bool = True               # save predictions as JSON
 
 
-# ─── Master config ────────────────────────────────────────────────────────────
+# ─── Master config ────────────────────────────────────────────────
 
 @dataclass
 class Config:
